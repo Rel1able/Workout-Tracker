@@ -1,15 +1,62 @@
-import { Outlet } from "react-router";
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
+import { WorkoutProvider } from './contexts/WorkoutContext'
+import { ToastProvider } from './components/Toast'
+import Layout from './components/Layout'
+import ProtectedRoute from './components/ProtectedRoute'
+import LoginPage from './pages/LoginPage'
+import DashboardPage from './pages/DashboardPage'
+import WorkoutSessionPage from './pages/WorkoutSessionPage'
+import TemplatesPage from './pages/TemplatesPage'
 
-function App() {
+export default function App() {
   return (
-    <div className="h-screen bg-gray-200 flex flex-col justify-between items-center p-4">
-      <header>Workout Tracker</header>
-      <main>
-        <Outlet />
-      </main>
-      <footer>Wwwww</footer>
-    </div>
-  );
-}
+    <BrowserRouter>
+      <AuthProvider>
+        <WorkoutProvider>
+          <ToastProvider>
+            <Routes>
+              {/* Public */}
+              <Route path="/login" element={<LoginPage />} />
 
-export default App;
+              {/* Protected */}
+              <Route
+                path="/"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <DashboardPage />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/workout"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <WorkoutSessionPage />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/templates"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <TemplatesPage />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ToastProvider>
+        </WorkoutProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
