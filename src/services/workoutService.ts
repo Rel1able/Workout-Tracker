@@ -42,33 +42,69 @@ export async function fetchWorkoutByDate(
 }
 
 /**
- * Persist a completed workout session to the database.
- * Returns the newly created workout row and any new PRs.
+ * Persist a workout session to the database. Creates a new row, or — when
+ * `workoutId` is provided — replaces all exercises/sets on the existing row.
+ * Returns the workout row and any new PRs.
  */
 export async function saveWorkout(
   userId: string,
   date: string,
   startedAt: string,
-  sessionExercises: SessionExercise[]
+  sessionExercises: SessionExercise[],
+  workoutId?: number | null
 ): Promise<{ workout: Workout; newPRs: string[] }> {
   const finishedAt = new Date().toISOString()
 
-  // 1. Insert workout row
-  const { data: workoutData, error: workoutErr } = await supabase
-    .from('workouts')
-    .insert({
-      user_id: userId,
-      workout_date: date,
-      started_at: startedAt,
-      finished_at: finishedAt,
-    })
-    .select()
-    .single()
+  let workout: Workout
 
-  if (workoutErr) throw new Error(workoutErr.message)
-  const workout = workoutData as Workout
+  if (workoutId) {
+    // Update existing workout: clear its exercises/sets, then re-insert.
+    const { data: existingWE, error: weListErr } = await supabase
+      .from('workout_exercises')
+      .select('id')
+      .eq('workout_id', workoutId)
+    if (weListErr) throw new Error(weListErr.message)
 
-  // 2. Insert exercises and sets
+    const weIds = (existingWE ?? []).map(r => (r as { id: number }).id)
+    if (weIds.length > 0) {
+      const { error: setsDelErr } = await supabase
+        .from('workout_sets')
+        .delete()
+        .in('workout_exercise_id', weIds)
+      if (setsDelErr) throw new Error(setsDelErr.message)
+
+      const { error: weDelErr } = await supabase
+        .from('workout_exercises')
+        .delete()
+        .eq('workout_id', workoutId)
+      if (weDelErr) throw new Error(weDelErr.message)
+    }
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('workouts')
+      .update({ workout_date: date, finished_at: finishedAt })
+      .eq('id', workoutId)
+      .eq('user_id', userId)
+      .select()
+      .single()
+    if (updateErr) throw new Error(updateErr.message)
+    workout = updated as Workout
+  } else {
+    const { data: workoutData, error: workoutErr } = await supabase
+      .from('workouts')
+      .insert({
+        user_id: userId,
+        workout_date: date,
+        started_at: startedAt,
+        finished_at: finishedAt,
+      })
+      .select()
+      .single()
+    if (workoutErr) throw new Error(workoutErr.message)
+    workout = workoutData as Workout
+  }
+
+  // Insert exercises and sets
   for (let i = 0; i < sessionExercises.length; i++) {
     const ex = sessionExercises[i]
     if (!ex.exercise_id) continue

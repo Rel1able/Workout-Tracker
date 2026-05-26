@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { ClipboardList, Plus, ChevronUp, ChevronDown, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
@@ -54,14 +55,16 @@ export default function TemplatesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-white">My Templates</h1>
-        <button onClick={openNew} className="btn-primary">＋ New</button>
+        <button onClick={openNew} className="btn-primary flex items-center gap-1.5">
+          <Plus size={16} /> New
+        </button>
       </div>
 
       {loading ? (
         <div className="flex justify-center py-12"><Spinner size="lg" /></div>
       ) : templates.length === 0 ? (
         <div className="card text-center py-12 text-gray-500 space-y-3">
-          <div className="text-4xl">📋</div>
+          <ClipboardList size={40} className="mx-auto text-gray-600" />
           <p>No templates yet.</p>
           <button onClick={openNew} className="btn-secondary">Create your first template</button>
         </div>
@@ -237,9 +240,9 @@ function TemplateEditor({ template, userId, onClose, onSaved }: TemplateEditorPr
             <label className="text-sm text-gray-400">Exercises</label>
             <button
               onClick={() => setPickerOpen(true)}
-              className="text-emerald-500 hover:text-emerald-400 text-sm font-medium transition-colors"
+              className="text-emerald-500 hover:text-emerald-400 text-sm font-medium transition-colors flex items-center gap-1"
             >
-              ＋ Add
+              <Plus size={14} /> Add
             </button>
           </div>
 
@@ -258,24 +261,27 @@ function TemplateEditor({ template, userId, onClose, onSaved }: TemplateEditorPr
                     <button
                       onClick={() => moveUp(idx)}
                       disabled={idx === 0}
-                      className="text-gray-500 hover:text-white disabled:opacity-20 leading-none text-xs"
+                      className="text-gray-500 hover:text-white disabled:opacity-20 leading-none"
+                      aria-label="Move up"
                     >
-                      ▲
+                      <ChevronUp size={14} />
                     </button>
                     <button
                       onClick={() => moveDown(idx)}
                       disabled={idx === exercises.length - 1}
-                      className="text-gray-500 hover:text-white disabled:opacity-20 leading-none text-xs"
+                      className="text-gray-500 hover:text-white disabled:opacity-20 leading-none"
+                      aria-label="Move down"
                     >
-                      ▼
+                      <ChevronDown size={14} />
                     </button>
                   </div>
                   <span className="flex-1 text-white text-sm">{ex.name}</span>
                   <button
                     onClick={() => remove(idx)}
-                    className="text-gray-600 hover:text-red-400 transition-colors text-sm"
+                    className="text-gray-600 hover:text-red-400 transition-colors"
+                    aria-label="Remove"
                   >
-                    ✕
+                    <X size={16} />
                   </button>
                 </li>
               ))}

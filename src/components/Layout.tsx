@@ -1,5 +1,6 @@
 import { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { Dumbbell, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -27,8 +28,9 @@ export default function Layout({ children }: { children: ReactNode }) {
       {/* Navbar */}
       <nav className="sticky top-0 z-30 bg-gray-950/90 backdrop-blur border-b border-gray-800">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link to="/" className="font-bold text-emerald-400 text-lg tracking-tight">
-            💪 WorkoutTracker
+          <Link to="/" className="font-bold text-emerald-400 text-lg tracking-tight flex items-center gap-1.5">
+            <Dumbbell size={20} />
+            WorkoutTracker
           </Link>
           <div className="flex items-center gap-2">
             {user && (
@@ -37,9 +39,11 @@ export default function Layout({ children }: { children: ReactNode }) {
                 {navLink('/templates', 'Templates')}
                 <button
                   onClick={signOut}
-                  className="text-gray-500 hover:text-red-400 transition-colors text-sm px-2 py-1 rounded-lg"
+                  className="text-gray-500 hover:text-red-400 transition-colors text-sm px-2 py-1 rounded-lg flex items-center gap-1"
+                  title="Sign out"
+                  aria-label="Sign out"
                 >
-                  Sign out
+                  <LogOut size={16} />
                 </button>
               </>
             )}

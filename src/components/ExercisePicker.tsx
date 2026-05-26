@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Plus } from 'lucide-react'
 import Modal from './Modal'
 import Spinner from './Spinner'
 import { Exercise } from '../types/database'
@@ -97,7 +98,7 @@ export default function ExercisePicker({ isOpen, onClose, onSelect, excludeIds =
                   disabled={adding}
                   className="w-full text-left px-3 py-2.5 rounded-lg bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-400 transition-colors text-sm flex items-center gap-2"
                 >
-                  {adding ? <Spinner size="sm" /> : <span>＋</span>}
+                  {adding ? <Spinner size="sm" /> : <Plus size={16} />}
                   Add "{query.trim()}" as custom exercise
                 </button>
               </li>

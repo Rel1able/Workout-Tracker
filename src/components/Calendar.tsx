@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { fetchWorkoutDates } from '../services/workoutService'
 
@@ -64,11 +65,15 @@ export default function Calendar({ onDayClick }: CalendarProps) {
     <div className="card">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <button onClick={prevMonth} className="btn-ghost px-2 py-1 text-lg">‹</button>
+        <button onClick={prevMonth} className="btn-ghost px-2 py-1" aria-label="Previous month">
+          <ChevronLeft size={20} />
+        </button>
         <span className="font-bold text-white text-lg">
           {MONTHS[viewMonth]} {viewYear}
         </span>
-        <button onClick={nextMonth} className="btn-ghost px-2 py-1 text-lg">›</button>
+        <button onClick={nextMonth} className="btn-ghost px-2 py-1" aria-label="Next month">
+          <ChevronRight size={20} />
+        </button>
       </div>
 
       {/* Day labels */}

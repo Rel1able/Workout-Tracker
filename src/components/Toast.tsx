@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react'
 
 type ToastType = 'success' | 'error' | 'info'
 
@@ -35,10 +36,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     info: 'bg-gray-800 border-gray-600 text-gray-100',
   }
 
-  const typeIcons: Record<ToastType, string> = {
-    success: '🏆',
-    error: '❌',
-    info: 'ℹ️',
+  const typeIcons: Record<ToastType, JSX.Element> = {
+    success: <CheckCircle2 size={18} />,
+    error: <AlertCircle size={18} />,
+    info: <Info size={18} />,
   }
 
   return (
@@ -51,13 +52,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             className={`flex items-start gap-3 p-3 rounded-lg border shadow-xl pointer-events-auto transition-all ${typeStyles[t.type]}`}
           >
-            <span className="text-lg leading-none mt-0.5">{typeIcons[t.type]}</span>
+            <span className="shrink-0 mt-0.5">{typeIcons[t.type]}</span>
             <p className="flex-1 text-sm font-medium">{t.message}</p>
             <button
               onClick={() => dismiss(t.id)}
-              className="text-current opacity-60 hover:opacity-100 transition-opacity text-lg leading-none"
+              className="text-current opacity-60 hover:opacity-100 transition-opacity"
+              aria-label="Dismiss"
             >
-              ×
+              <X size={16} />
             </button>
           </div>
         ))}

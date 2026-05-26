@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Dumbbell } from 'lucide-react'
 import Modal from './Modal'
 import Spinner from './Spinner'
 import { WorkoutTemplate } from '../types/database'
@@ -39,8 +40,9 @@ export default function TemplateSelector({ isOpen, onClose, onSelect }: Template
               onClick={() => { onSelect(null); onClose() }}
               className="w-full text-left p-4 rounded-xl border border-dashed border-gray-600 hover:border-emerald-500 hover:bg-emerald-900/10 transition-colors group"
             >
-              <div className="font-semibold text-white group-hover:text-emerald-400">
-                🏋️ Empty Workout
+              <div className="font-semibold text-white group-hover:text-emerald-400 flex items-center gap-2">
+                <Dumbbell size={18} />
+                Empty Workout
               </div>
               <div className="text-sm text-gray-400 mt-0.5">Start from scratch</div>
             </button>

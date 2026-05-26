@@ -5,6 +5,7 @@ import { ToastProvider } from './components/Toast'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 import DashboardPage from './pages/DashboardPage'
 import WorkoutSessionPage from './pages/WorkoutSessionPage'
 import TemplatesPage from './pages/TemplatesPage'
@@ -18,6 +19,7 @@ export default function App() {
             <Routes>
               {/* Public */}
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
 
               {/* Protected */}
               <Route

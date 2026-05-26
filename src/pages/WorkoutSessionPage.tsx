@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Check, Plus, Trash2, X, Dumbbell } from 'lucide-react'
 import { useWorkoutSession } from '../contexts/WorkoutContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
@@ -18,6 +19,8 @@ export default function WorkoutSessionPage() {
     exercises,
     workoutDate,
     startedAt,
+    editingWorkoutId,
+    isEditing,
     clearSession,
     addExercise,
     removeExercise,
@@ -55,11 +58,11 @@ export default function WorkoutSessionPage() {
     if (!user || !workoutDate || !startedAt) return
     setSaving(true)
     try {
-      const { newPRs } = await saveWorkout(user.id, workoutDate, startedAt, exercises)
+      const { newPRs } = await saveWorkout(user.id, workoutDate, startedAt, exercises, editingWorkoutId)
       if (newPRs.length > 0) {
-        newPRs.forEach(pr => showToast(`🏆 New PR! ${pr}`, 'success'))
+        newPRs.forEach(pr => showToast(`New PR! ${pr}`, 'success'))
       } else {
-        showToast('Workout saved!', 'success')
+        showToast(isEditing ? 'Workout updated!' : 'Workout saved!', 'success')
       }
       clearSession()
       navigate('/')
@@ -85,21 +88,27 @@ export default function WorkoutSessionPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">Workout</h1>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            {isEditing ? 'Edit Workout' : 'Workout'}
+            <span className="text-xs font-normal text-emerald-500 bg-emerald-900/30 px-2 py-0.5 rounded-full">
+              Auto-saved
+            </span>
+          </h1>
           <p className="text-gray-400 text-sm">{formattedDate}</p>
         </div>
         <button
           onClick={() => setConfirmOpen(true)}
-          className="btn-primary"
+          className="btn-primary flex items-center gap-1.5"
           disabled={exercises.length === 0}
         >
-          ✓ Finish
+          <Check size={16} />
+          {isEditing ? 'Save' : 'Finish'}
         </button>
       </div>
 
       {exercises.length === 0 && (
         <div className="card text-center py-8 text-gray-500">
-          <div className="text-4xl mb-3">🏋️</div>
+          <Dumbbell size={40} className="mx-auto mb-3 text-gray-600" />
           <p>No exercises yet. Add one below!</p>
         </div>
       )}
@@ -130,10 +139,10 @@ export default function WorkoutSessionPage() {
             </div>
             <button
               onClick={() => removeExercise(ex.localId)}
-              className="text-gray-600 hover:text-red-400 transition-colors text-xl leading-none px-1"
+              className="text-gray-600 hover:text-red-400 transition-colors px-1"
               title="Remove exercise"
             >
-              ✕
+              <Trash2 size={18} />
             </button>
           </div>
 
@@ -182,8 +191,9 @@ export default function WorkoutSessionPage() {
                         <button
                           onClick={() => removeSet(ex.localId, s.localId)}
                           className="text-gray-600 hover:text-red-400 transition-colors"
+                          aria-label="Remove set"
                         >
-                          ✕
+                          <X size={16} />
                         </button>
                       </td>
                     </tr>
@@ -197,7 +207,7 @@ export default function WorkoutSessionPage() {
             onClick={() => addSet(ex.localId)}
             className="text-sm text-emerald-500 hover:text-emerald-400 transition-colors font-medium flex items-center gap-1"
           >
-            ＋ Add Set
+            <Plus size={16} /> Add Set
           </button>
         </div>
       ))}
@@ -205,9 +215,9 @@ export default function WorkoutSessionPage() {
       {/* Add Exercise button */}
       <button
         onClick={() => setExercisePickerOpen(true)}
-        className="w-full py-3 border-2 border-dashed border-gray-700 hover:border-emerald-600 text-gray-500 hover:text-emerald-500 rounded-xl transition-colors text-sm font-medium"
+        className="w-full py-3 border-2 border-dashed border-gray-700 hover:border-emerald-600 text-gray-500 hover:text-emerald-500 rounded-xl transition-colors text-sm font-medium flex items-center justify-center gap-1.5"
       >
-        ＋ Add Exercise
+        <Plus size={16} /> Add Exercise
       </button>
 
       {/* Exercise Picker Modal */}
@@ -222,13 +232,15 @@ export default function WorkoutSessionPage() {
       <Modal
         isOpen={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Save Workout?"
+        title={isEditing ? 'Update Workout?' : 'Save Workout?'}
       >
         <div className="space-y-4">
           <p className="text-gray-300 text-sm">
             You have <strong className="text-white">{exercises.length} exercise{exercises.length !== 1 ? 's' : ''}</strong> with{' '}
             <strong className="text-white">{exercises.reduce((n, e) => n + e.sets.filter(s => (s.reps ?? 0) > 0 || (s.weight_kg ?? 0) > 0).length, 0)} valid sets</strong>.
-            This will save your workout and calculate any new personal records.
+            {isEditing
+              ? ' This will replace the existing workout and recalculate any new personal records.'
+              : ' This will save your workout and calculate any new personal records.'}
           </p>
           <div className="flex gap-3">
             <button
@@ -237,7 +249,7 @@ export default function WorkoutSessionPage() {
               className="btn-primary flex-1 flex items-center justify-center gap-2"
             >
               {saving && <Spinner size="sm" />}
-              Save Workout
+              {isEditing ? 'Update Workout' : 'Save Workout'}
             </button>
             <button
               onClick={() => setConfirmOpen(false)}
@@ -250,7 +262,7 @@ export default function WorkoutSessionPage() {
             onClick={() => { clearSession(); navigate('/') }}
             className="w-full text-red-500 hover:text-red-400 text-sm text-center py-1 transition-colors"
           >
-            Discard workout
+            {isEditing ? 'Cancel editing (revert changes)' : 'Discard workout'}
           </button>
         </div>
       </Modal>

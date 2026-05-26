@@ -1,3 +1,4 @@
+import { Pencil } from 'lucide-react'
 import Modal from './Modal'
 import Spinner from './Spinner'
 import { Workout, WorkoutExercise } from '../types/database'
@@ -9,6 +10,7 @@ interface WorkoutSummaryProps {
   loading: boolean
   date: string
   onStartWorkout?: () => void
+  onEditWorkout?: (workout: Workout & { workout_exercises: WorkoutExercise[] }) => void
 }
 
 export default function WorkoutSummary({
@@ -18,6 +20,7 @@ export default function WorkoutSummary({
   loading,
   date,
   onStartWorkout,
+  onEditWorkout,
 }: WorkoutSummaryProps) {
   const formatted = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long',
@@ -83,6 +86,16 @@ export default function WorkoutSummary({
               <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-medium">Notes</p>
               <p className="text-gray-300 text-sm">{workout.notes}</p>
             </div>
+          )}
+
+          {onEditWorkout && (
+            <button
+              onClick={() => { onEditWorkout(workout); onClose() }}
+              className="btn-secondary w-full flex items-center justify-center gap-2"
+            >
+              <Pencil size={16} />
+              Edit Workout
+            </button>
           )}
         </div>
       ) : (

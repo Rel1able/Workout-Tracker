@@ -1,12 +1,13 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Dumbbell } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import Spinner from '../components/Spinner'
 
-type Mode = 'login' | 'register'
+type Mode = 'login' | 'register' | 'forgot'
 
 export default function LoginPage() {
-  const { signIn, signUp } = useAuth()
+  const { signIn, signUp, sendPasswordReset } = useAuth()
   const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
@@ -16,6 +17,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
+  const switchMode = (m: Mode) => {
+    setMode(m)
+    setError(null)
+    setSuccessMsg(null)
+  }
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -24,12 +31,9 @@ export default function LoginPage() {
 
     if (mode === 'login') {
       const { error } = await signIn(email, password)
-      if (error) {
-        setError(error)
-      } else {
-        navigate('/')
-      }
-    } else {
+      if (error) setError(error)
+      else navigate('/')
+    } else if (mode === 'register') {
       const { error } = await signUp(email, password, displayName)
       if (error) {
         setError(error)
@@ -37,36 +41,50 @@ export default function LoginPage() {
         setSuccessMsg('Account created! Check your email to confirm, then log in.')
         setMode('login')
       }
+    } else {
+      const { error } = await sendPasswordReset(email)
+      if (error) setError(error)
+      else setSuccessMsg('If an account exists, a reset link has been sent. Check your inbox.')
     }
 
     setLoading(false)
   }
+
+  const title =
+    mode === 'login' ? 'Sign In'
+    : mode === 'register' ? 'Create Account'
+    : 'Reset Password'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3">💪</div>
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-600/20 mb-3">
+            <Dumbbell size={32} className="text-emerald-400" />
+          </div>
           <h1 className="text-2xl font-bold text-white">WorkoutTracker</h1>
           <p className="text-gray-400 text-sm mt-1">Track your gains, crush your PRs</p>
         </div>
 
         <div className="card">
-          {/* Tab switcher */}
-          <div className="flex bg-gray-800 rounded-lg p-1 mb-6">
-            {(['login', 'register'] as Mode[]).map(m => (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setError(null); setSuccessMsg(null) }}
-                className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition-colors capitalize ${
-                  mode === m ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'
-                }`}
-              >
-                {m === 'login' ? 'Sign In' : 'Create Account'}
-              </button>
-            ))}
-          </div>
+          {mode !== 'forgot' ? (
+            <div className="flex bg-gray-800 rounded-lg p-1 mb-6">
+              {(['login', 'register'] as Mode[]).map(m => (
+                <button
+                  key={m}
+                  onClick={() => switchMode(m)}
+                  className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition-colors capitalize ${
+                    mode === m ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {m === 'login' ? 'Sign In' : 'Create Account'}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <h2 className="text-lg font-bold text-white mb-4">Reset Password</h2>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'register' && (
@@ -78,7 +96,7 @@ export default function LoginPage() {
                   placeholder="Your name"
                   value={displayName}
                   onChange={e => setDisplayName(e.target.value)}
-                  required={mode === 'register'}
+                  required
                 />
               </div>
             )}
@@ -95,18 +113,20 @@ export default function LoginPage() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Password</label>
-              <input
-                type="password"
-                className="input"
-                placeholder={mode === 'register' ? 'Min 6 characters' : '••••••••'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                minLength={mode === 'register' ? 6 : undefined}
-              />
-            </div>
+            {mode !== 'forgot' && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Password</label>
+                <input
+                  type="password"
+                  className="input"
+                  placeholder={mode === 'register' ? 'Min 6 characters' : '••••••••'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  minLength={mode === 'register' ? 6 : undefined}
+                />
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-900/40 border border-red-800 text-red-300 text-sm rounded-lg px-3 py-2">
@@ -122,8 +142,28 @@ export default function LoginPage() {
 
             <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
               {loading && <Spinner size="sm" />}
-              {mode === 'login' ? 'Sign In' : 'Create Account'}
+              {title}
             </button>
+
+            {mode === 'login' && (
+              <button
+                type="button"
+                onClick={() => switchMode('forgot')}
+                className="block w-full text-center text-sm text-gray-400 hover:text-emerald-400 transition-colors"
+              >
+                Forgot your password?
+              </button>
+            )}
+
+            {mode === 'forgot' && (
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                className="block w-full text-center text-sm text-gray-400 hover:text-emerald-400 transition-colors"
+              >
+                Back to sign in
+              </button>
+            )}
           </form>
         </div>
       </div>

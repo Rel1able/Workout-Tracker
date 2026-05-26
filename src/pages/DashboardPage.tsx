@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Plus, Trophy } from 'lucide-react'
 import Calendar from '../components/Calendar'
 import TemplateSelector from '../components/TemplateSelector'
 import WorkoutSummary from '../components/WorkoutSummary'
@@ -28,7 +29,7 @@ function todayStr() {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { initSession } = useWorkoutSession()
+  const { initSession, initEditSession } = useWorkoutSession()
   const { showToast } = useToast()
   const navigate = useNavigate()
   const now = useClock()
@@ -67,6 +68,11 @@ export default function DashboardPage() {
     }
   }, [user, showToast])
 
+  const handleEditWorkout = (w: Workout & { workout_exercises: WorkoutExercise[] }) => {
+    initEditSession(w)
+    navigate('/workout')
+  }
+
   const handleTemplateSelect = (template: WorkoutTemplate | null) => {
     const today = todayStr()
     if (template && template.template_exercises) {
@@ -98,9 +104,9 @@ export default function DashboardPage() {
         <div className="text-gray-400 mt-1">{formattedDate}</div>
         <button
           onClick={() => setTemplateSelectorOpen(true)}
-          className="btn-primary mt-4 px-8 text-base"
+          className="btn-primary mt-4 px-8 text-base inline-flex items-center gap-2"
         >
-          ＋ Start Workout
+          <Plus size={18} /> Start Workout
         </button>
       </div>
 
@@ -110,7 +116,8 @@ export default function DashboardPage() {
       {/* Personal Records */}
       <div className="card">
         <h2 className="font-bold text-white mb-4 flex items-center gap-2">
-          🏆 <span>Personal Records</span>
+          <Trophy size={20} className="text-amber-400" />
+          <span>Personal Records</span>
         </h2>
         {prsLoading ? (
           <div className="flex justify-center py-4"><Spinner /></div>
@@ -155,6 +162,7 @@ export default function DashboardPage() {
             ? () => setTemplateSelectorOpen(true)
             : undefined
         }
+        onEditWorkout={handleEditWorkout}
       />
     </div>
   )
