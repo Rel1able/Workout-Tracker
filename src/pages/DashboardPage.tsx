@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trophy } from 'lucide-react'
+import { Plus, Play, Trophy } from 'lucide-react'
 import Calendar from '../components/Calendar'
 import TemplateSelector from '../components/TemplateSelector'
 import WorkoutSummary from '../components/WorkoutSummary'
 import { useAuth } from '../contexts/AuthContext'
 import { useWorkoutSession } from '../contexts/WorkoutContext'
 import { useToast } from '../components/Toast'
-import { fetchWorkoutByDate } from '../services/workoutService'
+import { fetchWorkoutByDate, fetchDraftWorkout } from '../services/workoutService'
 import { fetchPersonalRecords } from '../services/prService'
 import { WorkoutTemplate, Workout, WorkoutExercise, PersonalRecord } from '../types/database'
 import Spinner from '../components/Spinner'
@@ -29,7 +29,7 @@ function todayStr() {
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { initSession, initEditSession } = useWorkoutSession()
+  const { initSession, initEditSession, resumeDraftSession, hasActiveSession } = useWorkoutSession()
   const { showToast } = useToast()
   const navigate = useNavigate()
   const now = useClock()
@@ -52,6 +52,14 @@ export default function DashboardPage() {
       .catch(err => showToast(err.message, 'error'))
       .finally(() => setPrsLoading(false))
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // If no active local session, check DB for an unfinished draft for today
+  useEffect(() => {
+    if (!user || hasActiveSession) return
+    fetchDraftWorkout(user.id, todayStr())
+      .then(draft => { if (draft) resumeDraftSession(draft) })
+      .catch(() => { /* ignore */ })
+  }, [user, hasActiveSession, resumeDraftSession])
 
   const handleDayClick = useCallback(async (date: string) => {
     if (!user) return
@@ -102,12 +110,21 @@ export default function DashboardPage() {
       <div className="card text-center">
         <div className="text-3xl font-bold text-white tracking-tight">{formattedTime}</div>
         <div className="text-gray-400 mt-1">{formattedDate}</div>
-        <button
-          onClick={() => setTemplateSelectorOpen(true)}
-          className="btn-primary mt-4 px-8 text-base inline-flex items-center gap-2"
-        >
-          <Plus size={18} /> Start Workout
-        </button>
+        {hasActiveSession ? (
+          <button
+            onClick={() => navigate('/workout')}
+            className="btn-primary mt-4 px-8 text-base inline-flex items-center gap-2"
+          >
+            <Play size={18} /> Continue Workout
+          </button>
+        ) : (
+          <button
+            onClick={() => setTemplateSelectorOpen(true)}
+            className="btn-primary mt-4 px-8 text-base inline-flex items-center gap-2"
+          >
+            <Plus size={18} /> Start Workout
+          </button>
+        )}
       </div>
 
       {/* Calendar */}

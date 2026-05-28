@@ -8,7 +8,7 @@ import ExercisePicker from '../components/ExercisePicker'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
 import { Exercise } from '../types/database'
-import { saveWorkout } from '../services/workoutService'
+import { saveWorkout, finishWorkout, upsertWorkoutDraft } from '../services/workoutService'
 import { fetchExercises } from '../services/exerciseService'
 
 export default function WorkoutSessionPage() {
@@ -21,7 +21,11 @@ export default function WorkoutSessionPage() {
     startedAt,
     editingWorkoutId,
     isEditing,
+    isDraft,
+    saveStatus,
     clearSession,
+    discardSession,
+    markFinished,
     addExercise,
     removeExercise,
     updateExerciseName,
@@ -58,7 +62,17 @@ export default function WorkoutSessionPage() {
     if (!user || !workoutDate || !startedAt) return
     setSaving(true)
     try {
-      const { newPRs } = await saveWorkout(user.id, workoutDate, startedAt, exercises, editingWorkoutId)
+      let newPRs: string[] = []
+      if (isDraft) {
+        // Flush any pending edits, then mark finished + recompute PRs
+        const id = await upsertWorkoutDraft(user.id, editingWorkoutId, workoutDate, startedAt, exercises)
+        const result = await finishWorkout(user.id, id, exercises)
+        newPRs = result.newPRs
+        markFinished()
+      } else {
+        const result = await saveWorkout(user.id, workoutDate, startedAt, exercises, editingWorkoutId)
+        newPRs = result.newPRs
+      }
       if (newPRs.length > 0) {
         newPRs.forEach(pr => showToast(`New PR! ${pr}`, 'success'))
       } else {
@@ -68,6 +82,17 @@ export default function WorkoutSessionPage() {
       navigate('/')
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Failed to save workout', 'error')
+    } finally {
+      setSaving(false)
+      setConfirmOpen(false)
+    }
+  }
+
+  const handleDiscard = async () => {
+    setSaving(true)
+    try {
+      await discardSession()
+      navigate('/')
     } finally {
       setSaving(false)
       setConfirmOpen(false)
@@ -90,9 +115,24 @@ export default function WorkoutSessionPage() {
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
             {isEditing ? 'Edit Workout' : 'Workout'}
-            <span className="text-xs font-normal text-emerald-500 bg-emerald-900/30 px-2 py-0.5 rounded-full">
-              Auto-saved
-            </span>
+            {isDraft && (
+              <span
+                className={`text-xs font-normal px-2 py-0.5 rounded-full ${
+                  saveStatus === 'saving'
+                    ? 'text-amber-400 bg-amber-900/30'
+                    : saveStatus === 'error'
+                    ? 'text-red-400 bg-red-900/30'
+                    : 'text-emerald-500 bg-emerald-900/30'
+                }`}
+                title="Changes auto-save to the cloud"
+              >
+                {saveStatus === 'saving'
+                  ? 'Saving…'
+                  : saveStatus === 'error'
+                  ? 'Save failed'
+                  : 'Auto-saved'}
+              </span>
+            )}
           </h1>
           <p className="text-gray-400 text-sm">{formattedDate}</p>
         </div>
@@ -259,8 +299,9 @@ export default function WorkoutSessionPage() {
             </button>
           </div>
           <button
-            onClick={() => { clearSession(); navigate('/') }}
-            className="w-full text-red-500 hover:text-red-400 text-sm text-center py-1 transition-colors"
+            onClick={isEditing ? () => { clearSession(); navigate('/') } : handleDiscard}
+            disabled={saving}
+            className="w-full text-red-500 hover:text-red-400 text-sm text-center py-1 transition-colors disabled:opacity-50"
           >
             {isEditing ? 'Cancel editing (revert changes)' : 'Discard workout'}
           </button>

@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { Workout, WorkoutExercise, SessionExercise } from '../types/database'
 
-/** Fetch all workout dates for a user in a date range (for calendar highlighting) */
+/** Fetch all finished workout dates for a user in a date range (for calendar highlighting) */
 export async function fetchWorkoutDates(
   userId: string,
   from: string,
@@ -13,9 +13,34 @@ export async function fetchWorkoutDates(
     .eq('user_id', userId)
     .gte('workout_date', from)
     .lte('workout_date', to)
+    .not('finished_at', 'is', null)
 
   if (error) throw new Error(error.message)
   return (data as { workout_date: string }[]).map(r => r.workout_date)
+}
+
+/** Fetch the user's in-progress (draft) workout for a date, if any */
+export async function fetchDraftWorkout(
+  userId: string,
+  date: string
+): Promise<(Workout & { workout_exercises: WorkoutExercise[] }) | null> {
+  const { data, error } = await supabase
+    .from('workouts')
+    .select(`
+      *,
+      workout_exercises (
+        *,
+        exercise:exercises (*),
+        workout_sets (*)
+      )
+    `)
+    .eq('user_id', userId)
+    .eq('workout_date', date)
+    .is('finished_at', null)
+    .maybeSingle()
+
+  if (error) throw new Error(error.message)
+  return data as (Workout & { workout_exercises: WorkoutExercise[] }) | null
 }
 
 /** Fetch a single workout with all exercises and sets for a given date */
@@ -39,6 +64,150 @@ export async function fetchWorkoutByDate(
 
   if (error) throw new Error(error.message)
   return data as (Workout & { workout_exercises: WorkoutExercise[] }) | null
+}
+
+/** Delete a workout row (cascades to exercises/sets). */
+export async function deleteWorkout(workoutId: number, userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('workouts')
+    .delete()
+    .eq('id', workoutId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Persist an in-progress (draft) workout. Does NOT set finished_at and does
+ * NOT recompute PRs. Creates the row if `workoutId` is null, otherwise
+ * replaces its exercises/sets. Returns the workoutId.
+ */
+export async function upsertWorkoutDraft(
+  userId: string,
+  workoutId: number | null,
+  date: string,
+  startedAt: string,
+  sessionExercises: SessionExercise[]
+): Promise<number> {
+  let id = workoutId
+
+  if (id == null) {
+    // Reuse an existing draft for the same date if it exists; refuse to
+    // touch a finished workout (caller must use the edit flow).
+    const { data: existing, error: selErr } = await supabase
+      .from('workouts')
+      .select('id, finished_at')
+      .eq('user_id', userId)
+      .eq('workout_date', date)
+      .maybeSingle()
+    if (selErr) throw new Error(selErr.message)
+
+    if (existing) {
+      const row = existing as { id: number; finished_at: string | null }
+      if (row.finished_at) {
+        throw new Error('A finished workout already exists for this date.')
+      }
+      id = row.id
+    } else {
+      const { data, error } = await supabase
+        .from('workouts')
+        .insert({
+          user_id: userId,
+          workout_date: date,
+          started_at: startedAt,
+          finished_at: null,
+        })
+        .select()
+        .single()
+      if (error) throw new Error(error.message)
+      id = (data as Workout).id
+    }
+  } else {
+    const { error } = await supabase
+      .from('workouts')
+      .update({ workout_date: date, started_at: startedAt })
+      .eq('id', id)
+      .eq('user_id', userId)
+    if (error) throw new Error(error.message)
+  }
+
+  await replaceWorkoutExercises(id, sessionExercises)
+  return id
+}
+
+/** Mark a draft workout as finished and compute new PRs. */
+export async function finishWorkout(
+  userId: string,
+  workoutId: number,
+  sessionExercises: SessionExercise[]
+): Promise<{ newPRs: string[] }> {
+  const { error } = await supabase
+    .from('workouts')
+    .update({ finished_at: new Date().toISOString() })
+    .eq('id', workoutId)
+    .eq('user_id', userId)
+  if (error) throw new Error(error.message)
+
+  const newPRs = await calculateAndSavePRs(userId, workoutId, sessionExercises)
+  return { newPRs }
+}
+
+/** Replace all exercises/sets for a workout with the provided session data. */
+async function replaceWorkoutExercises(
+  workoutId: number,
+  sessionExercises: SessionExercise[]
+): Promise<void> {
+  const { data: existingWE, error: weListErr } = await supabase
+    .from('workout_exercises')
+    .select('id')
+    .eq('workout_id', workoutId)
+  if (weListErr) throw new Error(weListErr.message)
+
+  const weIds = (existingWE ?? []).map(r => (r as { id: number }).id)
+  if (weIds.length > 0) {
+    const { error: setsDelErr } = await supabase
+      .from('workout_sets')
+      .delete()
+      .in('workout_exercise_id', weIds)
+    if (setsDelErr) throw new Error(setsDelErr.message)
+
+    const { error: weDelErr } = await supabase
+      .from('workout_exercises')
+      .delete()
+      .eq('workout_id', workoutId)
+    if (weDelErr) throw new Error(weDelErr.message)
+  }
+
+  for (let i = 0; i < sessionExercises.length; i++) {
+    const ex = sessionExercises[i]
+    if (!ex.exercise_id) continue
+
+    const validSets = ex.sets.filter(
+      s => (s.reps !== null && s.reps > 0) || (s.weight_kg !== null && s.weight_kg > 0)
+    )
+
+    const { data: weData, error: weErr } = await supabase
+      .from('workout_exercises')
+      .insert({
+        workout_id: workoutId,
+        exercise_id: ex.exercise_id,
+        sort_order: i,
+      })
+      .select()
+      .single()
+    if (weErr) throw new Error(weErr.message)
+    const we = weData as WorkoutExercise
+
+    if (validSets.length > 0) {
+      const setRows = validSets.map(s => ({
+        workout_exercise_id: we.id,
+        set_number: s.set_number,
+        reps: s.reps,
+        weight_kg: s.weight_kg,
+      }))
+      const { error: setsErr } = await supabase.from('workout_sets').insert(setRows)
+      if (setsErr) throw new Error(setsErr.message)
+    }
+  }
 }
 
 /**
