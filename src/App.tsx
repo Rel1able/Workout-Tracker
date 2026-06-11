@@ -9,6 +9,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import DashboardPage from './pages/DashboardPage'
 import WorkoutSessionPage from './pages/WorkoutSessionPage'
 import TemplatesPage from './pages/TemplatesPage'
+import ProgressPage from './pages/ProgressPage'
 
 export default function App() {
   return (
@@ -38,6 +39,16 @@ export default function App() {
                   <ProtectedRoute>
                     <Layout>
                       <WorkoutSessionPage />
+                    </Layout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/progress"
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <ProgressPage />
                     </Layout>
                   </ProtectedRoute>
                 }

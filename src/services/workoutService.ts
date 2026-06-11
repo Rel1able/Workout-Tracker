@@ -86,7 +86,8 @@ export async function upsertWorkoutDraft(
   workoutId: number | null,
   date: string,
   startedAt: string,
-  sessionExercises: SessionExercise[]
+  sessionExercises: SessionExercise[],
+  notes?: string | null
 ): Promise<number> {
   let id = workoutId
 
@@ -115,6 +116,7 @@ export async function upsertWorkoutDraft(
           workout_date: date,
           started_at: startedAt,
           finished_at: null,
+          notes: notes ?? null,
         })
         .select()
         .single()
@@ -124,7 +126,7 @@ export async function upsertWorkoutDraft(
   } else {
     const { error } = await supabase
       .from('workouts')
-      .update({ workout_date: date, started_at: startedAt })
+      .update({ workout_date: date, started_at: startedAt, notes: notes ?? null })
       .eq('id', id)
       .eq('user_id', userId)
     if (error) throw new Error(error.message)
@@ -220,7 +222,8 @@ export async function saveWorkout(
   date: string,
   startedAt: string,
   sessionExercises: SessionExercise[],
-  workoutId?: number | null
+  workoutId?: number | null,
+  notes?: string | null
 ): Promise<{ workout: Workout; newPRs: string[] }> {
   const finishedAt = new Date().toISOString()
 
@@ -251,7 +254,7 @@ export async function saveWorkout(
 
     const { data: updated, error: updateErr } = await supabase
       .from('workouts')
-      .update({ workout_date: date, finished_at: finishedAt })
+      .update({ workout_date: date, finished_at: finishedAt, notes: notes ?? null })
       .eq('id', workoutId)
       .eq('user_id', userId)
       .select()
@@ -266,6 +269,7 @@ export async function saveWorkout(
         workout_date: date,
         started_at: startedAt,
         finished_at: finishedAt,
+        notes: notes ?? null,
       })
       .select()
       .single()

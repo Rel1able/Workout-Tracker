@@ -4,27 +4,37 @@
 
 @layer base {
   body {
-    @apply bg-gray-950 text-gray-100 min-h-screen;
+    @apply bg-gray-950 text-gray-100 min-h-screen antialiased;
+  }
+  /* 16px inputs prevent iOS auto-zoom on focus */
+  input, select, textarea {
+    font-size: 16px;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-semibold py-2.5 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-950/50;
   }
   .btn-secondary {
-    @apply bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors;
+    @apply bg-gray-800 hover:bg-gray-700 active:scale-[0.98] text-white font-semibold py-2.5 px-4 rounded-xl transition-all border border-gray-700;
   }
   .btn-danger {
-    @apply bg-red-700 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors;
+    @apply bg-red-700 hover:bg-red-600 active:scale-[0.98] text-white font-semibold py-2.5 px-4 rounded-xl transition-all;
   }
   .btn-ghost {
-    @apply text-gray-400 hover:text-white hover:bg-gray-800 py-2 px-3 rounded-lg transition-colors;
+    @apply text-gray-400 hover:text-white hover:bg-gray-800 py-2 px-3 rounded-xl transition-colors;
   }
   .input {
-    @apply bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors w-full;
+    @apply bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors w-full;
   }
   .card {
-    @apply bg-gray-900 border border-gray-800 rounded-xl p-4;
+    @apply bg-gray-900/80 border border-gray-800 rounded-2xl p-4;
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }

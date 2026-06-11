@@ -1,7 +1,15 @@
-import { Pencil } from 'lucide-react'
+import { Pencil, Clock, Weight } from 'lucide-react'
 import Modal from './Modal'
 import Spinner from './Spinner'
 import { Workout, WorkoutExercise } from '../types/database'
+import { workoutVolume } from '../services/statsService'
+
+function formatDuration(start: string, end: string): string | null {
+  const mins = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
+  if (mins <= 0) return null
+  const h = Math.floor(mins / 60)
+  return h > 0 ? `${h}h ${mins % 60}m` : `${mins}m`
+}
 
 interface WorkoutSummaryProps {
   isOpen: boolean
@@ -35,15 +43,22 @@ export default function WorkoutSummary({
       ) : workout ? (
         <div className="space-y-4">
           {/* Workout meta */}
-          <div className="flex gap-4 text-sm text-gray-400">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400">
             {workout.started_at && (
               <span>
                 Started: {new Date(workout.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
-            {workout.finished_at && (
-              <span>
-                Finished: {new Date(workout.finished_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {workout.started_at && workout.finished_at && formatDuration(workout.started_at, workout.finished_at) && (
+              <span className="inline-flex items-center gap-1">
+                <Clock size={14} className="text-gray-500" />
+                {formatDuration(workout.started_at, workout.finished_at)}
+              </span>
+            )}
+            {workoutVolume(workout) > 0 && (
+              <span className="inline-flex items-center gap-1 text-emerald-400">
+                <Weight size={14} />
+                {Math.round(workoutVolume(workout)).toLocaleString()} kg total
               </span>
             )}
           </div>

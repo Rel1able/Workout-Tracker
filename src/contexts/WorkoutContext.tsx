@@ -15,6 +15,7 @@ interface PersistedSession {
   startedAt: string | null
   editingWorkoutId: number | null
   isDraft: boolean
+  notes?: string
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -28,6 +29,8 @@ interface WorkoutContextValue {
   isDraft: boolean
   hasActiveSession: boolean
   saveStatus: SaveStatus
+  notes: string
+  setNotes: (notes: string) => void
 
   initSession: (date: string, initialExercises?: { exercise_id: number; exercise_name: string }[]) => void
   initEditSession: (workout: Workout & { workout_exercises: WorkoutExercise[] }) => void
@@ -43,6 +46,7 @@ interface WorkoutContextValue {
   addSet: (exerciseLocalId: string) => void
   updateSet: (exerciseLocalId: string, setLocalId: string, field: 'reps' | 'weight_kg', value: number | null) => void
   removeSet: (exerciseLocalId: string, setLocalId: string) => void
+  replaceSets: (exerciseLocalId: string, sets: { reps: number | null; weight_kg: number | null }[]) => void
 }
 
 const WorkoutContext = createContext<WorkoutContextValue | undefined>(undefined)
@@ -90,6 +94,7 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
   const [startedAt, setStartedAt] = useState<string | null>(persisted?.startedAt ?? null)
   const [editingWorkoutId, setEditingWorkoutId] = useState<number | null>(persisted?.editingWorkoutId ?? null)
   const [isDraft, setIsDraft] = useState<boolean>(persisted?.isDraft ?? false)
+  const [notes, setNotes] = useState<string>(persisted?.notes ?? '')
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
 
   const hydratedRef = useRef(false)
@@ -106,9 +111,9 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       try { window.localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
       return
     }
-    const payload: PersistedSession = { exercises, workoutDate, startedAt, editingWorkoutId, isDraft }
+    const payload: PersistedSession = { exercises, workoutDate, startedAt, editingWorkoutId, isDraft, notes }
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)) } catch { /* ignore */ }
-  }, [exercises, workoutDate, startedAt, editingWorkoutId, isDraft])
+  }, [exercises, workoutDate, startedAt, editingWorkoutId, isDraft, notes])
 
   // Debounced auto-save to Supabase (drafts only)
   useEffect(() => {
@@ -125,7 +130,8 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
             editingWorkoutId,
             workoutDate,
             startedAt,
-            exercises
+            exercises,
+            notes
           )
           if (id !== editingWorkoutId) setEditingWorkoutId(id)
           setSaveStatus('saved')
@@ -142,7 +148,7 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
     }
-  }, [exercises, workoutDate, startedAt, isDraft, user, editingWorkoutId])
+  }, [exercises, workoutDate, startedAt, isDraft, user, editingWorkoutId, notes])
 
   const initSession = useCallback(
     (date: string, initialExercises?: { exercise_id: number; exercise_name: string }[]) => {
@@ -150,6 +156,7 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       setStartedAt(new Date().toISOString())
       setEditingWorkoutId(null)
       setIsDraft(true)
+      setNotes('')
       setSaveStatus('idle')
       if (initialExercises && initialExercises.length > 0) {
         setExercises(
@@ -174,6 +181,7 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       setStartedAt(workout.started_at ?? new Date().toISOString())
       setEditingWorkoutId(workout.id)
       setIsDraft(false)
+      setNotes(workout.notes ?? '')
       setSaveStatus('idle')
       setExercises(loadedExercisesFrom(workout))
     },
@@ -186,6 +194,7 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       setStartedAt(workout.started_at ?? new Date().toISOString())
       setEditingWorkoutId(workout.id)
       setIsDraft(true)
+      setNotes(workout.notes ?? '')
       setSaveStatus('saved')
       setExercises(loadedExercisesFrom(workout))
     },
@@ -202,6 +211,7 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
     setStartedAt(null)
     setEditingWorkoutId(null)
     setIsDraft(false)
+    setNotes('')
     setSaveStatus('idle')
   }, [])
 
@@ -222,6 +232,7 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
     setStartedAt(null)
     setEditingWorkoutId(null)
     setIsDraft(false)
+    setNotes('')
     setSaveStatus('idle')
   }, [isDraft, editingWorkoutId, user])
 
@@ -257,11 +268,13 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       prev.map(ex => {
         if (ex.localId !== exerciseLocalId) return ex
         const nextNumber = ex.sets.length + 1
+        // Prefill from the previous set — most sets repeat the same load
+        const prev = ex.sets[ex.sets.length - 1]
         const newSet: SessionSet = {
           localId: genId(),
           set_number: nextNumber,
-          reps: null,
-          weight_kg: null,
+          reps: prev?.reps ?? null,
+          weight_kg: prev?.weight_kg ?? null,
         }
         return { ...ex, sets: [...ex.sets, newSet] }
       })
@@ -298,6 +311,26 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
     )
   }, [])
 
+  const replaceSets = useCallback(
+    (exerciseLocalId: string, sets: { reps: number | null; weight_kg: number | null }[]) => {
+      setExercises(prev =>
+        prev.map(ex => {
+          if (ex.localId !== exerciseLocalId) return ex
+          return {
+            ...ex,
+            sets: sets.map((s, i) => ({
+              localId: genId(),
+              set_number: i + 1,
+              reps: s.reps,
+              weight_kg: s.weight_kg,
+            })),
+          }
+        })
+      )
+    },
+    []
+  )
+
   return (
     <WorkoutContext.Provider
       value={{
@@ -309,6 +342,8 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
         isDraft,
         hasActiveSession: workoutDate !== null,
         saveStatus,
+        notes,
+        setNotes,
         initSession,
         initEditSession,
         resumeDraftSession,
@@ -321,6 +356,7 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
         addSet,
         updateSet,
         removeSet,
+        replaceSets,
       }}
     >
       {children}

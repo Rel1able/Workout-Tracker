@@ -1,15 +1,44 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, Plus, Trash2, X, Dumbbell } from 'lucide-react'
+import { Check, Plus, Trash2, X, Dumbbell, Clock, History, StickyNote } from 'lucide-react'
 import { useWorkoutSession } from '../contexts/WorkoutContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import ExercisePicker from '../components/ExercisePicker'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
+import RestTimer from '../components/RestTimer'
 import { Exercise } from '../types/database'
 import { saveWorkout, finishWorkout, upsertWorkoutDraft } from '../services/workoutService'
 import { fetchExercises } from '../services/exerciseService'
+import { fetchWorkoutHistory, buildLastPerformanceMap, LastPerformance } from '../services/statsService'
+
+// Elapsed time since startedAt, updated every second
+function useElapsed(startedAt: string | null, active: boolean) {
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!active) return
+    const t = setInterval(() => setTick(n => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [active])
+  if (!startedAt) return null
+  const sec = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000))
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
+function formatLastSets(lp: LastPerformance): string {
+  return lp.sets
+    .map(s => {
+      const reps = s.reps ?? '–'
+      return s.weight_kg != null ? `${reps}×${s.weight_kg}kg` : `${reps}`
+    })
+    .join('  ')
+}
 
 export default function WorkoutSessionPage() {
   const navigate = useNavigate()
@@ -23,6 +52,8 @@ export default function WorkoutSessionPage() {
     isEditing,
     isDraft,
     saveStatus,
+    notes,
+    setNotes,
     clearSession,
     discardSession,
     markFinished,
@@ -32,15 +63,20 @@ export default function WorkoutSessionPage() {
     addSet,
     updateSet,
     removeSet,
+    replaceSets,
   } = useWorkoutSession()
 
   const [exercisePickerOpen, setExercisePickerOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [allExercises, setAllExercises] = useState<Exercise[]>([])
+  const [lastPerf, setLastPerf] = useState<Map<number, LastPerformance>>(new Map())
+  const [notesOpen, setNotesOpen] = useState(false)
 
   // For inline exercise name editing (dropdown search)
   const [editingExercise, setEditingExercise] = useState<string | null>(null)
+
+  const elapsed = useElapsed(startedAt, isDraft && !isEditing)
 
   // Redirect if no active session
   useEffect(() => {
@@ -52,11 +88,27 @@ export default function WorkoutSessionPage() {
     fetchExercises().then(setAllExercises).catch(() => {})
   }, [])
 
+  // Load recent history for "last time" hints
+  useEffect(() => {
+    if (!user || !workoutDate) return
+    const from = new Date()
+    from.setDate(from.getDate() - 180)
+    const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`
+    fetchWorkoutHistory(user.id, fromStr)
+      .then(history => setLastPerf(buildLastPerformanceMap(history, workoutDate)))
+      .catch(() => {})
+  }, [user, workoutDate])
+
   const formattedDate = workoutDate
     ? new Date(workoutDate + 'T12:00:00').toLocaleDateString('en-US', {
         weekday: 'long', month: 'long', day: 'numeric',
       })
     : ''
+
+  const validSetCount = useMemo(
+    () => exercises.reduce((n, e) => n + e.sets.filter(s => (s.reps ?? 0) > 0 || (s.weight_kg ?? 0) > 0).length, 0),
+    [exercises]
+  )
 
   const handleFinish = async () => {
     if (!user || !workoutDate || !startedAt) return
@@ -65,12 +117,12 @@ export default function WorkoutSessionPage() {
       let newPRs: string[] = []
       if (isDraft) {
         // Flush any pending edits, then mark finished + recompute PRs
-        const id = await upsertWorkoutDraft(user.id, editingWorkoutId, workoutDate, startedAt, exercises)
+        const id = await upsertWorkoutDraft(user.id, editingWorkoutId, workoutDate, startedAt, exercises, notes)
         const result = await finishWorkout(user.id, id, exercises)
         newPRs = result.newPRs
         markFinished()
       } else {
-        const result = await saveWorkout(user.id, workoutDate, startedAt, exercises, editingWorkoutId)
+        const result = await saveWorkout(user.id, workoutDate, startedAt, exercises, editingWorkoutId, notes)
         newPRs = result.newPRs
       }
       if (newPRs.length > 0) {
@@ -104,12 +156,16 @@ export default function WorkoutSessionPage() {
     setEditingExercise(null)
   }
 
+  const handleCopyLast = (localId: string, lp: LastPerformance) => {
+    replaceSets(localId, lp.sets.map(s => ({ reps: s.reps, weight_kg: s.weight_kg })))
+  }
+
   const currentExerciseIds = exercises.map(e => e.exercise_id).filter(Boolean) as number[]
 
   if (!workoutDate) return null
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="space-y-4 pb-24">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -134,7 +190,14 @@ export default function WorkoutSessionPage() {
               </span>
             )}
           </h1>
-          <p className="text-gray-400 text-sm">{formattedDate}</p>
+          <p className="text-gray-400 text-sm flex items-center gap-2">
+            {formattedDate}
+            {elapsed && (
+              <span className="inline-flex items-center gap-1 text-emerald-500 tabular-nums">
+                <Clock size={13} /> {elapsed}
+              </span>
+            )}
+          </p>
         </div>
         <button
           onClick={() => setConfirmOpen(true)}
@@ -154,111 +217,169 @@ export default function WorkoutSessionPage() {
       )}
 
       {/* Exercise cards */}
-      {exercises.map((ex, exIdx) => (
-        <div key={ex.localId} className="card space-y-3">
-          {/* Exercise header */}
-          <div className="flex items-center gap-2">
-            <div className="flex-1">
-              {editingExercise === ex.localId ? (
-                <ExerciseInlineSearch
-                  value={ex.exercise_name}
-                  allExercises={allExercises}
-                  onSelect={e => handlePickExerciseForSlot(ex.localId, e)}
-                  onBlur={() => setEditingExercise(null)}
-                />
-              ) : (
-                <button
-                  onClick={() => setEditingExercise(ex.localId)}
-                  className="text-left font-semibold text-white hover:text-emerald-400 transition-colors w-full"
-                >
-                  {ex.exercise_name || (
-                    <span className="text-gray-500 italic">Select exercise…</span>
-                  )}
-                </button>
-              )}
+      {exercises.map(ex => {
+        const last = ex.exercise_id ? lastPerf.get(ex.exercise_id) : undefined
+        return (
+          <div key={ex.localId} className="card space-y-3">
+            {/* Exercise header */}
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                {editingExercise === ex.localId ? (
+                  <ExerciseInlineSearch
+                    value={ex.exercise_name}
+                    allExercises={allExercises}
+                    onSelect={e => handlePickExerciseForSlot(ex.localId, e)}
+                    onBlur={() => setEditingExercise(null)}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setEditingExercise(ex.localId)}
+                    className="text-left font-semibold text-white hover:text-emerald-400 transition-colors w-full"
+                  >
+                    {ex.exercise_name || (
+                      <span className="text-gray-500 italic">Select exercise…</span>
+                    )}
+                  </button>
+                )}
+              </div>
+              <button
+                onClick={() => removeExercise(ex.localId)}
+                className="text-gray-600 hover:text-red-400 transition-colors p-1.5"
+                title="Remove exercise"
+              >
+                <Trash2 size={18} />
+              </button>
             </div>
-            <button
-              onClick={() => removeExercise(ex.localId)}
-              className="text-gray-600 hover:text-red-400 transition-colors px-1"
-              title="Remove exercise"
-            >
-              <Trash2 size={18} />
-            </button>
-          </div>
 
-          {/* Sets table */}
-          {ex.sets.length > 0 && (
-            <div className="overflow-x-auto">
+            {/* Last-time hint */}
+            {last && (
+              <div className="flex items-center justify-between gap-2 bg-gray-800/60 rounded-lg px-2.5 py-1.5 text-xs">
+                <span className="text-gray-400 truncate flex items-center gap-1.5">
+                  <History size={13} className="shrink-0 text-gray-500" />
+                  Last ({new Date(last.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}):{' '}
+                  <span className="text-gray-300 tabular-nums">{formatLastSets(last)}</span>
+                </span>
+                {ex.sets.length === 0 && (
+                  <button
+                    onClick={() => handleCopyLast(ex.localId, last)}
+                    className="text-emerald-500 hover:text-emerald-400 font-semibold shrink-0 transition-colors"
+                  >
+                    Copy
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Sets table */}
+            {ex.sets.length > 0 && (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-gray-500">
                     <th className="text-left pb-1 font-medium w-8">#</th>
+                    {last && <th className="text-left pb-1 font-medium w-20">Prev</th>}
                     <th className="text-left pb-1 font-medium">Reps</th>
                     <th className="text-left pb-1 font-medium">kg</th>
                     <th className="w-8" />
                   </tr>
                 </thead>
                 <tbody>
-                  {ex.sets.map(s => (
-                    <tr key={s.localId}>
-                      <td className="py-1 text-gray-500 pr-2">{s.set_number}</td>
-                      <td className="py-1 pr-2">
-                        <input
-                          type="number"
-                          min="0"
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:border-emerald-500"
-                          placeholder="—"
-                          value={s.reps ?? ''}
-                          onChange={e =>
-                            updateSet(ex.localId, s.localId, 'reps', e.target.value === '' ? null : Number(e.target.value))
-                          }
-                        />
-                      </td>
-                      <td className="py-1 pr-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:border-emerald-500"
-                          placeholder="—"
-                          value={s.weight_kg ?? ''}
-                          onChange={e =>
-                            updateSet(ex.localId, s.localId, 'weight_kg', e.target.value === '' ? null : Number(e.target.value))
-                          }
-                        />
-                      </td>
-                      <td className="py-1">
-                        <button
-                          onClick={() => removeSet(ex.localId, s.localId)}
-                          className="text-gray-600 hover:text-red-400 transition-colors"
-                          aria-label="Remove set"
-                        >
-                          <X size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {ex.sets.map((s, sIdx) => {
+                    const prevSet = last?.sets[sIdx]
+                    return (
+                      <tr key={s.localId}>
+                        <td className="py-1 text-gray-500 pr-2">{s.set_number}</td>
+                        {last && (
+                          <td className="py-1 pr-2 text-gray-500 text-xs tabular-nums">
+                            {prevSet
+                              ? `${prevSet.reps ?? '–'}×${prevSet.weight_kg ?? '–'}`
+                              : '—'}
+                          </td>
+                        )}
+                        <td className="py-1 pr-2">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min="0"
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-white focus:outline-none focus:border-emerald-500"
+                            placeholder="—"
+                            value={s.reps ?? ''}
+                            onChange={e =>
+                              updateSet(ex.localId, s.localId, 'reps', e.target.value === '' ? null : Number(e.target.value))
+                            }
+                          />
+                        </td>
+                        <td className="py-1 pr-2">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.5"
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-white focus:outline-none focus:border-emerald-500"
+                            placeholder="—"
+                            value={s.weight_kg ?? ''}
+                            onChange={e =>
+                              updateSet(ex.localId, s.localId, 'weight_kg', e.target.value === '' ? null : Number(e.target.value))
+                            }
+                          />
+                        </td>
+                        <td className="py-1">
+                          <button
+                            onClick={() => removeSet(ex.localId, s.localId)}
+                            className="text-gray-600 hover:text-red-400 transition-colors p-1"
+                            aria-label="Remove set"
+                          >
+                            <X size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
-            </div>
-          )}
+            )}
 
-          <button
-            onClick={() => addSet(ex.localId)}
-            className="text-sm text-emerald-500 hover:text-emerald-400 transition-colors font-medium flex items-center gap-1"
-          >
-            <Plus size={16} /> Add Set
-          </button>
-        </div>
-      ))}
+            <button
+              onClick={() => addSet(ex.localId)}
+              className="text-sm text-emerald-500 hover:text-emerald-400 transition-colors font-medium flex items-center gap-1 py-1"
+            >
+              <Plus size={16} /> Add Set
+            </button>
+          </div>
+        )
+      })}
 
       {/* Add Exercise button */}
       <button
         onClick={() => setExercisePickerOpen(true)}
-        className="w-full py-3 border-2 border-dashed border-gray-700 hover:border-emerald-600 text-gray-500 hover:text-emerald-500 rounded-xl transition-colors text-sm font-medium flex items-center justify-center gap-1.5"
+        className="w-full py-3.5 border-2 border-dashed border-gray-700 hover:border-emerald-600 text-gray-500 hover:text-emerald-500 rounded-2xl transition-colors text-sm font-medium flex items-center justify-center gap-1.5"
       >
         <Plus size={16} /> Add Exercise
       </button>
+
+      {/* Notes */}
+      <div className="card space-y-2">
+        <button
+          onClick={() => setNotesOpen(o => !o)}
+          className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-white transition-colors w-full text-left"
+        >
+          <StickyNote size={16} className="text-gray-500" />
+          Notes
+          {notes && !notesOpen && (
+            <span className="text-gray-600 text-xs truncate flex-1">— {notes}</span>
+          )}
+        </button>
+        {(notesOpen || notes) && (
+          <textarea
+            className="input min-h-[72px] resize-y text-sm"
+            placeholder="How did it go? Energy, pain, machine settings…"
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+          />
+        )}
+      </div>
+
+      {/* Floating rest timer */}
+      <RestTimer />
 
       {/* Exercise Picker Modal */}
       <ExercisePicker
@@ -277,7 +398,7 @@ export default function WorkoutSessionPage() {
         <div className="space-y-4">
           <p className="text-gray-300 text-sm">
             You have <strong className="text-white">{exercises.length} exercise{exercises.length !== 1 ? 's' : ''}</strong> with{' '}
-            <strong className="text-white">{exercises.reduce((n, e) => n + e.sets.filter(s => (s.reps ?? 0) > 0 || (s.weight_kg ?? 0) > 0).length, 0)} valid sets</strong>.
+            <strong className="text-white">{validSetCount} valid sets</strong>.
             {isEditing
               ? ' This will replace the existing workout and recalculate any new personal records.'
               : ' This will save your workout and calculate any new personal records.'}
@@ -354,5 +475,3 @@ function ExerciseInlineSearch({ value, allExercises, onSelect, onBlur }: Exercis
     </div>
   )
 }
-
-
