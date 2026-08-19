@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Dumbbell } from 'lucide-react'
+import { AlertCircle, Check, Dumbbell } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import Spinner from '../components/Spinner'
 
@@ -38,134 +38,134 @@ export default function LoginPage() {
       if (error) {
         setError(error)
       } else {
-        setSuccessMsg('Account created! Check your email to confirm, then log in.')
+        setSuccessMsg('Account created. Confirm your email address, then sign in.')
         setMode('login')
       }
     } else {
       const { error } = await sendPasswordReset(email)
       if (error) setError(error)
-      else setSuccessMsg('If an account exists, a reset link has been sent. Check your inbox.')
+      else setSuccessMsg('If an account exists for that address, a reset link is on its way.')
     }
 
     setLoading(false)
   }
 
-  const title =
-    mode === 'login' ? 'Sign In'
-    : mode === 'register' ? 'Create Account'
-    : 'Reset Password'
+  const submitLabel =
+    mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : 'Send reset link'
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-600/20 mb-3">
-            <Dumbbell size={32} className="text-emerald-400" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">WorkoutTracker</h1>
-          <p className="text-gray-400 text-sm mt-1">Track your gains, crush your PRs</p>
+        <div className="flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded bg-accent text-[var(--accent-ink)] grid place-items-center">
+            <Dumbbell size={16} strokeWidth={2.5} />
+          </span>
+          <span className="font-bold tracking-tight">Workout Tracker</span>
         </div>
+        <h1 className="mt-6 text-xl font-bold tracking-tight">
+          {mode === 'forgot' ? 'Reset your password' : 'Log every set, see every gain'}
+        </h1>
+        <p className="mt-1.5 text-sm text-muted leading-relaxed">
+          {mode === 'forgot'
+            ? 'Enter your email and we will send you a link to set a new password.'
+            : 'Sessions, weights, reps and personal records — kept in one place across your devices.'}
+        </p>
 
-        <div className="card">
-          {mode !== 'forgot' ? (
-            <div className="flex bg-gray-800 rounded-lg p-1 mb-6">
-              {(['login', 'register'] as Mode[]).map(m => (
-                <button
-                  key={m}
-                  onClick={() => switchMode(m)}
-                  className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition-colors capitalize ${
-                    mode === m ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'
-                  }`}
-                >
-                  {m === 'login' ? 'Sign In' : 'Create Account'}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <h2 className="text-lg font-bold text-white mb-4">Reset Password</h2>
-          )}
+        {mode !== 'forgot' && (
+          <div className="seg mt-6 w-full" role="group" aria-label="Account">
+            <button
+              onClick={() => switchMode('login')}
+              aria-pressed={mode === 'login'}
+              className="flex-1"
+            >
+              Sign in
+            </button>
+            <button
+              onClick={() => switchMode('register')}
+              aria-pressed={mode === 'register'}
+              className="flex-1"
+            >
+              Create account
+            </button>
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Display Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Your name"
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  required
-                />
-              </div>
-            )}
-
+        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+          {mode === 'register' && (
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Email</label>
+              <label htmlFor="name" className="section-label">Display name</label>
               <input
-                type="email"
-                className="input"
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+                id="name"
+                type="text"
+                className="field mt-1.5"
+                placeholder="Your name"
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value)}
                 required
               />
             </div>
+          )}
 
-            {mode !== 'forgot' && (
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Password</label>
-                <input
-                  type="password"
-                  className="input"
-                  placeholder={mode === 'register' ? 'Min 6 characters' : '••••••••'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  minLength={mode === 'register' ? 6 : undefined}
-                />
-              </div>
-            )}
+          <div>
+            <label htmlFor="email" className="section-label">Email</label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              className="field mt-1.5"
+              placeholder="you@example.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
+          </div>
 
-            {error && (
-              <div className="bg-red-900/40 border border-red-800 text-red-300 text-sm rounded-lg px-3 py-2">
-                {error}
-              </div>
-            )}
+          {mode !== 'forgot' && (
+            <div>
+              <label htmlFor="password" className="section-label">Password</label>
+              <input
+                id="password"
+                type="password"
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                className="field mt-1.5"
+                placeholder={mode === 'register' ? 'At least 6 characters' : ''}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={mode === 'register' ? 6 : undefined}
+              />
+            </div>
+          )}
 
-            {successMsg && (
-              <div className="bg-emerald-900/40 border border-emerald-800 text-emerald-300 text-sm rounded-lg px-3 py-2">
-                {successMsg}
-              </div>
-            )}
+          {error && (
+            <p className="flex items-start gap-2 text-sm text-danger">
+              <AlertCircle size={15} className="shrink-0 mt-0.5" />
+              {error}
+            </p>
+          )}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2">
-              {loading && <Spinner size="sm" />}
-              {title}
+          {successMsg && (
+            <p className="flex items-start gap-2 text-sm text-success">
+              <Check size={15} className="shrink-0 mt-0.5" />
+              {successMsg}
+            </p>
+          )}
+
+          <button type="submit" disabled={loading} className="btn-primary btn-lg w-full">
+            {loading && <Spinner size="sm" />}
+            {submitLabel}
+          </button>
+
+          {mode !== 'register' && (
+            <button
+              type="button"
+              onClick={() => switchMode(mode === 'forgot' ? 'login' : 'forgot')}
+              className="block w-full text-center text-sm text-muted hover:text-ink transition-colors"
+            >
+              {mode === 'forgot' ? 'Back to sign in' : 'Forgot your password?'}
             </button>
-
-            {mode === 'login' && (
-              <button
-                type="button"
-                onClick={() => switchMode('forgot')}
-                className="block w-full text-center text-sm text-gray-400 hover:text-emerald-400 transition-colors"
-              >
-                Forgot your password?
-              </button>
-            )}
-
-            {mode === 'forgot' && (
-              <button
-                type="button"
-                onClick={() => switchMode('login')}
-                className="block w-full text-center text-sm text-gray-400 hover:text-emerald-400 transition-colors"
-              >
-                Back to sign in
-              </button>
-            )}
-          </form>
-        </div>
+          )}
+        </form>
       </div>
     </div>
   )

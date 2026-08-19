@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { KeyRound } from 'lucide-react'
+import { AlertCircle, Check, KeyRound } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import Spinner from '../components/Spinner'
@@ -56,79 +56,81 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-600/20 mb-3">
-            <KeyRound size={28} className="text-emerald-400" />
+        <div className="flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded bg-accent text-[var(--accent-ink)] grid place-items-center">
+            <KeyRound size={15} strokeWidth={2.5} />
+          </span>
+          <span className="font-bold tracking-tight">Workout Tracker</span>
+        </div>
+        <h1 className="mt-6 text-xl font-bold tracking-tight">Set a new password</h1>
+
+        {!ready ? (
+          <div className="mt-5 space-y-4">
+            <p className="flex items-center gap-2.5 text-sm text-muted">
+              <Spinner size="sm" />
+              Checking your reset link…
+            </p>
+            <p className="text-sm text-muted leading-relaxed">
+              If this does not continue in a few seconds, the link has probably expired. Request a
+              new one from the sign-in page.
+            </p>
+            <button onClick={() => navigate('/login')} className="btn-secondary w-full">
+              Back to sign in
+            </button>
           </div>
-          <h1 className="text-2xl font-bold text-white">Set New Password</h1>
-        </div>
+        ) : done ? (
+          <p className="mt-5 flex items-start gap-2 text-sm text-success">
+            <Check size={15} className="shrink-0 mt-0.5" />
+            Password updated. Taking you to your workouts…
+          </p>
+        ) : (
+          <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+            <div>
+              <label htmlFor="new-password" className="section-label">New password</label>
+              <input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                className="field mt-1.5"
+                placeholder="At least 6 characters"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={6}
+                autoFocus
+              />
+            </div>
 
-        <div className="card">
-          {!ready ? (
-            <div className="text-center py-6 space-y-3">
-              <Spinner size="lg" />
-              <p className="text-gray-400 text-sm">
-                Verifying reset link… If nothing happens, your link may be expired.
+            <div>
+              <label htmlFor="confirm-password" className="section-label">Confirm password</label>
+              <input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                className="field mt-1.5"
+                placeholder="Repeat it"
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                required
+                minLength={6}
+              />
+            </div>
+
+            {error && (
+              <p className="flex items-start gap-2 text-sm text-danger">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                {error}
               </p>
-              <button
-                onClick={() => navigate('/login')}
-                className="btn-secondary w-full"
-              >
-                Back to sign in
-              </button>
-            </div>
-          ) : done ? (
-            <div className="bg-emerald-900/40 border border-emerald-800 text-emerald-300 text-sm rounded-lg px-3 py-3 text-center">
-              Password updated! Redirecting…
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">New Password</label>
-                <input
-                  type="password"
-                  className="input"
-                  placeholder="Min 6 characters"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  autoFocus
-                />
-              </div>
+            )}
 
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Confirm Password</label>
-                <input
-                  type="password"
-                  className="input"
-                  placeholder="Repeat password"
-                  value={confirm}
-                  onChange={e => setConfirm(e.target.value)}
-                  required
-                  minLength={6}
-                />
-              </div>
-
-              {error && (
-                <div className="bg-red-900/40 border border-red-800 text-red-300 text-sm rounded-lg px-3 py-2">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn-primary w-full flex items-center justify-center gap-2"
-              >
-                {loading && <Spinner size="sm" />}
-                Update Password
-              </button>
-            </form>
-          )}
-        </div>
+            <button type="submit" disabled={loading} className="btn-primary btn-lg w-full">
+              {loading && <Spinner size="sm" />}
+              Update password
+            </button>
+          </form>
+        )}
       </div>
     </div>
   )

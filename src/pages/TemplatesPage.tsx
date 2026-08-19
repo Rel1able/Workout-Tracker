@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { ClipboardList, Plus, ChevronUp, ChevronDown, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, X } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
+import Skeleton from '../components/Skeleton'
 import ExercisePicker from '../components/ExercisePicker'
 import { WorkoutTemplate, Exercise } from '../types/database'
 import { fetchTemplates, saveTemplate, deleteTemplate } from '../services/templateService'
@@ -14,6 +15,7 @@ export default function TemplatesPage() {
 
   const [templates, setTemplates] = useState<WorkoutTemplate[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<WorkoutTemplate | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null)
@@ -22,11 +24,12 @@ export default function TemplatesPage() {
   const load = async () => {
     if (!user) return
     setLoading(true)
+    setLoadError(null)
     try {
       const data = await fetchTemplates(user.id)
       setTemplates(data)
     } catch (err: unknown) {
-      showToast(err instanceof Error ? err.message : 'Failed to load templates', 'error')
+      setLoadError(err instanceof Error ? err.message : 'Failed to load templates')
     } finally {
       setLoading(false)
     }
@@ -52,61 +55,75 @@ export default function TemplatesPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">My Templates</h1>
-        <button onClick={openNew} className="btn-primary flex items-center gap-1.5">
+    <div className="max-w-2xl">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="hidden lg:block text-xl font-bold tracking-tight">Templates</h1>
+          <p className="text-sm text-muted">Preset exercise lists you can start a workout from.</p>
+        </div>
+        <button onClick={openNew} className="btn-primary shrink-0">
           <Plus size={16} /> New
         </button>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12"><Spinner size="lg" /></div>
+        <div className="mt-5 space-y-2">
+          {[0, 1].map(i => <Skeleton key={i} className="h-16" />)}
+        </div>
+      ) : loadError ? (
+        <div className="mt-5 panel p-5">
+          <p className="text-sm font-semibold text-danger">Could not load your templates</p>
+          <p className="mt-1 text-sm text-muted">{loadError}</p>
+          <button onClick={load} className="btn-secondary mt-4">Try again</button>
+        </div>
       ) : templates.length === 0 ? (
-        <div className="card text-center py-12 text-gray-500 space-y-3">
-          <ClipboardList size={40} className="mx-auto text-gray-600" />
-          <p>No templates yet.</p>
-          <button onClick={openNew} className="btn-secondary">Create your first template</button>
+        <div className="mt-5 panel p-5">
+          <p className="text-sm font-semibold">No templates yet</p>
+          <p className="mt-1 text-sm text-muted leading-relaxed">
+            A template is just an ordered list of exercises — Push day, Legs, Full body. Pick one when
+            you start a workout and every exercise is already there, with last session's numbers
+            beside each set.
+          </p>
+          <button onClick={openNew} className="btn-primary mt-4">
+            <Plus size={16} /> Create a template
+          </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {templates.map(t => (
-            <div key={t.id} className="card">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <h2 className="font-semibold text-white text-lg">{t.name}</h2>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {t.template_exercises
-                      ?.sort((a, b) => a.sort_order - b.sort_order)
-                      .map(te => (
-                        <span
-                          key={te.id}
-                          className="bg-gray-800 text-gray-300 text-xs px-2 py-0.5 rounded-full"
-                        >
-                          {te.exercise?.name}
-                        </span>
-                      ))}
-                    {(!t.template_exercises || t.template_exercises.length === 0) && (
-                      <span className="text-gray-600 text-xs">No exercises</span>
-                    )}
+        <ul className="mt-4 border-t border-line">
+          {templates.map(t => {
+            const names = t.template_exercises
+              ?.slice()
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map(te => te.exercise?.name)
+              .filter(Boolean) as string[] | undefined
+            return (
+              <li key={t.id} className="flex items-start gap-3 py-3.5 border-b border-line">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="font-semibold truncate">{t.name}</h2>
+                    <span className="num text-2xs text-faint shrink-0">
+                      {names?.length ?? 0} exercises
+                    </span>
                   </div>
+                  <p className="mt-0.5 text-[0.8125rem] text-muted leading-relaxed">
+                    {names && names.length > 0 ? names.join(' · ') : 'No exercises yet'}
+                  </p>
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={() => openEdit(t)} className="btn-ghost text-sm">Edit</button>
+                <div className="flex shrink-0">
+                  <button onClick={() => openEdit(t)} className="btn-quiet btn-sm">Edit</button>
                   <button
                     onClick={() => setDeleteConfirmId(t.id)}
-                    className="btn-ghost text-sm text-red-500 hover:text-red-400"
+                    className="btn-quiet btn-sm hover:text-danger"
                   >
                     Delete
                   </button>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              </li>
+            )
+          })}
+        </ul>
       )}
 
-      {/* Template editor modal */}
       {editorOpen && (
         <TemplateEditor
           template={editing}
@@ -123,29 +140,30 @@ export default function TemplatesPage() {
               return [saved, ...prev]
             })
             setEditorOpen(false)
-            showToast('Template saved!', 'success')
+            showToast('Template saved', 'success')
           }}
         />
       )}
 
-      {/* Delete confirmation modal */}
       <Modal
         isOpen={deleteConfirmId !== null}
         onClose={() => setDeleteConfirmId(null)}
-        title="Delete Template?"
+        title="Delete template?"
       >
         <div className="space-y-4">
-          <p className="text-gray-300 text-sm">This cannot be undone.</p>
-          <div className="flex gap-3">
+          <p className="text-sm text-muted">
+            The template is removed. Workouts you already logged from it are not affected.
+          </p>
+          <div className="flex gap-2">
             <button
               onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
               disabled={deleting}
-              className="btn-danger flex-1 flex items-center justify-center gap-2"
+              className="btn-danger flex-1"
             >
               {deleting && <Spinner size="sm" />}
-              Delete
+              Delete template
             </button>
-            <button onClick={() => setDeleteConfirmId(null)} className="btn-secondary flex-1">
+            <button onClick={() => setDeleteConfirmId(null)} className="btn-secondary">
               Cancel
             </button>
           </div>
@@ -155,7 +173,7 @@ export default function TemplatesPage() {
   )
 }
 
-// ─── Template Editor ─────────────────────────────────────────────────────────
+// ─── Template editor ─────────────────────────────────────────────────────────
 
 interface TemplateEditorProps {
   template: WorkoutTemplate | null
@@ -170,6 +188,7 @@ function TemplateEditor({ template, userId, onClose, onSaved }: TemplateEditorPr
   const [exercises, setExercises] = useState<Exercise[]>(() => {
     if (!template?.template_exercises) return []
     return template.template_exercises
+      .slice()
       .sort((a, b) => a.sort_order - b.sort_order)
       .map(te => te.exercise!)
       .filter(Boolean)
@@ -177,20 +196,12 @@ function TemplateEditor({ template, userId, onClose, onSaved }: TemplateEditorPr
   const [saving, setSaving] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
 
-  const moveUp = (idx: number) => {
-    if (idx === 0) return
+  const move = (idx: number, dir: -1 | 1) => {
     setExercises(prev => {
+      const target = idx + dir
+      if (target < 0 || target >= prev.length) return prev
       const copy = [...prev]
-      ;[copy[idx - 1], copy[idx]] = [copy[idx], copy[idx - 1]]
-      return copy
-    })
-  }
-
-  const moveDown = (idx: number) => {
-    setExercises(prev => {
-      if (idx >= prev.length - 1) return prev
-      const copy = [...prev]
-      ;[copy[idx], copy[idx + 1]] = [copy[idx + 1], copy[idx]]
+      ;[copy[idx], copy[target]] = [copy[target], copy[idx]]
       return copy
     })
   }
@@ -198,15 +209,10 @@ function TemplateEditor({ template, userId, onClose, onSaved }: TemplateEditorPr
   const remove = (idx: number) => setExercises(prev => prev.filter((_, i) => i !== idx))
 
   const handleSave = async () => {
-    if (!name.trim()) { showToast('Template name is required', 'error'); return }
+    if (!name.trim()) { showToast('Give the template a name', 'error'); return }
     setSaving(true)
     try {
-      const saved = await saveTemplate(
-        userId,
-        name.trim(),
-        exercises.map(e => e.id),
-        template?.id
-      )
+      const saved = await saveTemplate(userId, name.trim(), exercises.map(e => e.id), template?.id)
       onSaved(saved)
     } catch (err: unknown) {
       showToast(err instanceof Error ? err.message : 'Failed to save template', 'error')
@@ -216,19 +222,15 @@ function TemplateEditor({ template, userId, onClose, onSaved }: TemplateEditorPr
   }
 
   return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      title={template ? 'Edit Template' : 'New Template'}
-      className="max-w-lg"
-    >
-      <div className="space-y-4">
+    <Modal isOpen onClose={onClose} title={template ? 'Edit template' : 'New template'}>
+      <div className="space-y-5">
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Template Name</label>
+          <label htmlFor="tpl-name" className="section-label">Name</label>
           <input
+            id="tpl-name"
             type="text"
-            className="input"
-            placeholder="e.g., Push Day, Pull Day…"
+            className="field mt-1.5"
+            placeholder="Push day, Legs, Full body…"
             value={name}
             onChange={e => setName(e.target.value)}
             autoFocus
@@ -236,50 +238,49 @@ function TemplateEditor({ template, userId, onClose, onSaved }: TemplateEditorPr
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm text-gray-400">Exercises</label>
+          <div className="flex items-center justify-between">
+            <span className="section-label">Exercises</span>
             <button
               onClick={() => setPickerOpen(true)}
-              className="text-emerald-500 hover:text-emerald-400 text-sm font-medium transition-colors flex items-center gap-1"
+              className="flex items-center gap-1 text-[0.8125rem] font-semibold text-accent hover:underline"
             >
               <Plus size={14} /> Add
             </button>
           </div>
 
           {exercises.length === 0 ? (
-            <div className="text-center py-6 text-gray-600 text-sm border border-dashed border-gray-700 rounded-xl">
-              No exercises added
-            </div>
+            <p className="mt-2 text-sm text-muted">
+              No exercises yet — add them in the order you train them.
+            </p>
           ) : (
-            <ul className="space-y-1.5">
+            <ul className="mt-2 border-t border-line">
               {exercises.map((ex, idx) => (
                 <li
                   key={`${ex.id}-${idx}`}
-                  className="flex items-center gap-2 bg-gray-800 rounded-lg px-3 py-2"
+                  className="flex items-center gap-2 py-1.5 border-b border-line"
                 >
-                  <div className="flex flex-col gap-0.5">
-                    <button
-                      onClick={() => moveUp(idx)}
-                      disabled={idx === 0}
-                      className="text-gray-500 hover:text-white disabled:opacity-20 leading-none"
-                      aria-label="Move up"
-                    >
-                      <ChevronUp size={14} />
-                    </button>
-                    <button
-                      onClick={() => moveDown(idx)}
-                      disabled={idx === exercises.length - 1}
-                      className="text-gray-500 hover:text-white disabled:opacity-20 leading-none"
-                      aria-label="Move down"
-                    >
-                      <ChevronDown size={14} />
-                    </button>
-                  </div>
-                  <span className="flex-1 text-white text-sm">{ex.name}</span>
+                  <span className="num text-xs font-bold text-faint w-4">{idx + 1}</span>
+                  <span className="flex-1 text-sm truncate">{ex.name}</span>
+                  <button
+                    onClick={() => move(idx, -1)}
+                    disabled={idx === 0}
+                    className="icon-btn w-8 h-8 disabled:opacity-25"
+                    aria-label={`Move ${ex.name} up`}
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  <button
+                    onClick={() => move(idx, 1)}
+                    disabled={idx === exercises.length - 1}
+                    className="icon-btn w-8 h-8 disabled:opacity-25"
+                    aria-label={`Move ${ex.name} down`}
+                  >
+                    <ChevronDown size={16} />
+                  </button>
                   <button
                     onClick={() => remove(idx)}
-                    className="text-gray-600 hover:text-red-400 transition-colors"
-                    aria-label="Remove"
+                    className="icon-btn w-8 h-8 hover:text-danger"
+                    aria-label={`Remove ${ex.name}`}
                   >
                     <X size={16} />
                   </button>
@@ -289,25 +290,19 @@ function TemplateEditor({ template, userId, onClose, onSaved }: TemplateEditorPr
           )}
         </div>
 
-        <div className="flex gap-3 pt-1">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="btn-primary flex-1 flex items-center justify-center gap-2"
-          >
+        <div className="flex gap-2">
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
             {saving && <Spinner size="sm" />}
-            Save Template
+            Save template
           </button>
-          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button onClick={onClose} className="btn-secondary">Cancel</button>
         </div>
       </div>
 
       <ExercisePicker
         isOpen={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onSelect={ex => setExercises(prev =>
-          prev.find(e => e.id === ex.id) ? prev : [...prev, ex]
-        )}
+        onSelect={ex => setExercises(prev => (prev.find(e => e.id === ex.id) ? prev : [...prev, ex]))}
         excludeIds={exercises.map(e => e.id)}
       />
     </Modal>

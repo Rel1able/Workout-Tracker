@@ -1,6 +1,6 @@
-import { Pencil, Clock, Weight } from 'lucide-react'
+import { Pencil, Plus } from 'lucide-react'
 import Modal from './Modal'
-import Spinner from './Spinner'
+import Skeleton from './Skeleton'
 import { Workout, WorkoutExercise } from '../types/database'
 import { workoutVolume } from '../services/statsService'
 
@@ -36,93 +36,117 @@ export default function WorkoutSummary({
     day: 'numeric',
   })
 
+  const volume = workout ? Math.round(workoutVolume(workout)) : 0
+  const duration =
+    workout?.started_at && workout?.finished_at
+      ? formatDuration(workout.started_at, workout.finished_at)
+      : null
+  const setCount = (workout?.workout_exercises ?? []).reduce(
+    (n, we) => n + (we.workout_sets ?? []).length,
+    0
+  )
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={formatted}>
       {loading ? (
-        <div className="flex justify-center py-8"><Spinner size="lg" /></div>
+        <div className="space-y-2">
+          {[0, 1, 2].map(i => <Skeleton key={i} className="h-16" />)}
+        </div>
       ) : workout ? (
-        <div className="space-y-4">
-          {/* Workout meta */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-400">
+        <div className="space-y-5">
+          {/* Meta */}
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <Meta label="Volume" value={volume > 0 ? `${volume.toLocaleString()} kg` : '—'} />
+            <Meta label="Sets" value={String(setCount)} />
+            <Meta label="Duration" value={duration ?? '—'} />
             {workout.started_at && (
-              <span>
-                Started: {new Date(workout.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            )}
-            {workout.started_at && workout.finished_at && formatDuration(workout.started_at, workout.finished_at) && (
-              <span className="inline-flex items-center gap-1">
-                <Clock size={14} className="text-gray-500" />
-                {formatDuration(workout.started_at, workout.finished_at)}
-              </span>
-            )}
-            {workoutVolume(workout) > 0 && (
-              <span className="inline-flex items-center gap-1 text-emerald-400">
-                <Weight size={14} />
-                {Math.round(workoutVolume(workout)).toLocaleString()} kg total
-              </span>
+              <Meta
+                label="Started"
+                value={new Date(workout.started_at).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              />
             )}
           </div>
 
           {/* Exercises */}
-          {workout.workout_exercises
-            ?.sort((a, b) => a.sort_order - b.sort_order)
-            .map(we => (
-              <div key={we.id} className="bg-gray-800 rounded-xl p-4">
-                <h3 className="font-semibold text-white mb-3">{we.exercise?.name}</h3>
-                {we.workout_sets && we.workout_sets.length > 0 ? (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-gray-500 text-left">
-                        <th className="pb-1 font-medium w-12">Set</th>
-                        <th className="pb-1 font-medium">Reps</th>
-                        <th className="pb-1 font-medium">Weight (kg)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {we.workout_sets
-                        .sort((a, b) => a.set_number - b.set_number)
-                        .map(s => (
-                          <tr key={s.id} className="text-gray-300">
-                            <td className="py-0.5 text-gray-500">{s.set_number}</td>
-                            <td className="py-0.5">{s.reps ?? '–'}</td>
-                            <td className="py-0.5">{s.weight_kg != null ? `${s.weight_kg}` : '–'}</td>
-                          </tr>
+          <div>
+            {workout.workout_exercises
+              ?.slice()
+              .sort((a, b) => a.sort_order - b.sort_order)
+              .map(we => {
+                const sets = (we.workout_sets ?? []).slice().sort((a, b) => a.set_number - b.set_number)
+                const top = sets.reduce((m, s) => Math.max(m, s.weight_kg ?? 0), 0)
+                return (
+                  <section key={we.id} className="py-3 border-b border-line first:border-t">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <h3 className="font-semibold text-sm truncate">{we.exercise?.name}</h3>
+                      {top > 0 && (
+                        <span className="num text-2xs text-faint shrink-0">top {top} kg</span>
+                      )}
+                    </div>
+                    {sets.length > 0 ? (
+                      <ol className="mt-1.5 space-y-0.5">
+                        {sets.map(s => (
+                          <li key={s.id} className="flex items-center gap-3 text-[0.8125rem]">
+                            <span className="num w-4 text-faint">{s.set_number}</span>
+                            <span className="num font-medium">
+                              {s.weight_kg != null ? `${s.weight_kg} kg` : '– kg'}
+                            </span>
+                            <span className="text-faint">×</span>
+                            <span className="num font-medium">{s.reps ?? '–'}</span>
+                          </li>
                         ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p className="text-gray-500 text-sm">No sets recorded</p>
-                )}
-              </div>
-            ))}
+                      </ol>
+                    ) : (
+                      <p className="mt-1 text-[0.8125rem] text-muted">No sets recorded</p>
+                    )}
+                  </section>
+                )
+              })}
+          </div>
 
           {workout.notes && (
-            <div className="bg-gray-800 rounded-xl p-4">
-              <p className="text-xs text-gray-500 mb-1 uppercase tracking-wider font-medium">Notes</p>
-              <p className="text-gray-300 text-sm">{workout.notes}</p>
+            <div>
+              <div className="section-label">Notes</div>
+              <p className="mt-1 text-sm text-muted leading-relaxed whitespace-pre-line">
+                {workout.notes}
+              </p>
             </div>
           )}
 
           {onEditWorkout && (
             <button
               onClick={() => { onEditWorkout(workout); onClose() }}
-              className="btn-secondary w-full flex items-center justify-center gap-2"
+              className="btn-secondary w-full"
             >
-              <Pencil size={16} />
-              Edit Workout
+              <Pencil size={15} /> Edit this workout
             </button>
           )}
         </div>
       ) : (
-        <div className="text-center py-6 space-y-4">
-          <p className="text-gray-400">No workout logged for this day.</p>
+        <div className="py-4">
+          <p className="text-sm font-semibold">Rest day</p>
+          <p className="mt-1 text-sm text-muted leading-relaxed">
+            Nothing was logged on this date.
+          </p>
           {onStartWorkout && (
-            <button onClick={() => { onClose(); onStartWorkout() }} className="btn-primary">
-              Start Workout
+            <button onClick={() => { onClose(); onStartWorkout() }} className="btn-primary mt-4">
+              <Plus size={16} /> Start today's workout
             </button>
           )}
         </div>
       )}
     </Modal>
+  )
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="section-label">{label}</div>
+      <div className="num text-base font-bold mt-0.5">{value}</div>
+    </div>
   )
 }

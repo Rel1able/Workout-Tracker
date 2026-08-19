@@ -7,7 +7,7 @@ interface CalendarProps {
   onDayClick: (date: string) => void
 }
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 const MONTHS = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December'
@@ -51,40 +51,43 @@ export default function Calendar({ onDayClick }: CalendarProps) {
     else setViewMonth(m => m + 1)
   }
 
-  // Build grid
-  const firstDow = new Date(viewYear, viewMonth, 1).getDay()
+  // Build grid — weeks start Monday
+  const firstDow = (new Date(viewYear, viewMonth, 1).getDay() + 6) % 7
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
   const cells: (number | null)[] = [
     ...Array(firstDow).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ]
-  // Pad to complete rows
   while (cells.length % 7 !== 0) cells.push(null)
 
+  const monthCount = [...workoutDates].length
+
   return (
-    <div className="card">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <button onClick={prevMonth} className="btn-ghost px-2 py-1" aria-label="Previous month">
-          <ChevronLeft size={20} />
-        </button>
-        <span className="font-bold text-white text-lg">
-          {MONTHS[viewMonth]} {viewYear}
-        </span>
-        <button onClick={nextMonth} className="btn-ghost px-2 py-1" aria-label="Next month">
-          <ChevronRight size={20} />
-        </button>
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="font-semibold">{MONTHS[viewMonth]} {viewYear}</h2>
+          <p className="text-xs text-muted num">
+            {monthCount} workout{monthCount === 1 ? '' : 's'} this month
+          </p>
+        </div>
+        <div className="flex">
+          <button onClick={prevMonth} className="icon-btn" aria-label="Previous month">
+            <ChevronLeft size={18} />
+          </button>
+          <button onClick={nextMonth} className="icon-btn" aria-label="Next month">
+            <ChevronRight size={18} />
+          </button>
+        </div>
       </div>
 
-      {/* Day labels */}
       <div className="grid grid-cols-7 mb-1">
-        {DAYS.map(d => (
-          <div key={d} className="text-center text-xs text-gray-500 font-medium py-1">{d}</div>
+        {DAYS.map((d, i) => (
+          <div key={i} className="text-center text-2xs font-semibold text-faint py-1">{d}</div>
         ))}
       </div>
 
-      {/* Day cells */}
-      <div className="grid grid-cols-7 gap-y-1">
+      <div className="grid grid-cols-7 gap-1">
         {cells.map((day, idx) => {
           if (!day) return <div key={`empty-${idx}`} />
 
@@ -98,25 +101,20 @@ export default function Calendar({ onDayClick }: CalendarProps) {
               key={dateStr}
               onClick={() => onDayClick(dateStr)}
               disabled={isFuture && !hasWorkout}
-              className={`
-                relative flex flex-col items-center justify-center h-10 rounded-lg text-sm font-medium transition-all
-                ${isToday
-                  ? 'bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-900/40'
-                  : hasWorkout
-                  ? 'bg-gray-800 text-white hover:bg-gray-700'
+              aria-label={`${dateStr}${hasWorkout ? ' — workout logged' : ''}`}
+              className={`relative h-9 rounded text-[0.8125rem] num transition-colors
+                ${hasWorkout
+                  ? 'bg-accent-soft text-accent font-semibold hover:bg-accent hover:text-[var(--accent-ink)]'
                   : isFuture
-                  ? 'text-gray-700 cursor-default'
-                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'}
-              `}
+                  ? 'text-faint cursor-default'
+                  : 'text-muted hover:bg-raised hover:text-ink'}
+                ${isToday ? 'ring-1 ring-inset ring-accent' : ''}`}
             >
               {day}
-              {hasWorkout && !isToday && (
-                <span className="absolute bottom-1 w-1 h-1 rounded-full bg-emerald-500" />
-              )}
             </button>
           )
         })}
       </div>
-    </div>
+    </section>
   )
 }

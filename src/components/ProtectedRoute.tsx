@@ -8,8 +8,9 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size="lg" />
+      <div className="min-h-screen flex items-center justify-center gap-2.5 text-sm text-muted">
+        <Spinner size="sm" />
+        Loading your workouts…
       </div>
     )
   }

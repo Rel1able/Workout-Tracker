@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Timer, X, Plus } from 'lucide-react'
+import { Plus, Timer, X } from 'lucide-react'
 
 const PRESETS = [60, 90, 120, 180]
+const DEFAULT_REST = 90
 
 function fmt(sec: number) {
   const m = Math.floor(sec / 60)
@@ -9,26 +10,41 @@ function fmt(sec: number) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+export interface RestTimerState {
+  remaining: number
+  running: boolean
+  done: boolean
+  lastPreset: number
+  start: (seconds?: number) => void
+  stop: () => void
+  extend: (seconds: number) => void
+}
+
 /**
- * Floating rest timer. Counts down using a wall-clock deadline so it stays
- * accurate when the phone locks or the tab is backgrounded.
+ * Rest countdown driven by a wall-clock deadline, so it stays accurate when the
+ * phone locks or the tab is backgrounded. State lives in the page so a set can
+ * start the rest automatically when it is marked done.
  */
-export default function RestTimer() {
+export function useRestTimer(): RestTimerState {
   const [endsAt, setEndsAt] = useState<number | null>(null)
   const [remaining, setRemaining] = useState(0)
-  const [pickerOpen, setPickerOpen] = useState(false)
+  const [lastPreset, setLastPreset] = useState(DEFAULT_REST)
   const doneRef = useRef(false)
 
-  const start = useCallback((seconds: number) => {
+  const start = useCallback((seconds: number = DEFAULT_REST) => {
     doneRef.current = false
+    setLastPreset(seconds)
     setEndsAt(Date.now() + seconds * 1000)
     setRemaining(seconds)
-    setPickerOpen(false)
   }, [])
 
   const stop = useCallback(() => {
     setEndsAt(null)
     setRemaining(0)
+  }, [])
+
+  const extend = useCallback((seconds: number) => {
+    setEndsAt(e => (e === null ? null : e + seconds * 1000))
   }, [])
 
   useEffect(() => {
@@ -38,8 +54,8 @@ export default function RestTimer() {
       setRemaining(left)
       if (left === 0 && !doneRef.current) {
         doneRef.current = true
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200])
-        setTimeout(() => setEndsAt(null), 1500)
+        if (navigator.vibrate) navigator.vibrate([180, 90, 180])
+        setTimeout(() => setEndsAt(null), 2000)
       }
     }
     tick()
@@ -47,64 +63,81 @@ export default function RestTimer() {
     return () => clearInterval(t)
   }, [endsAt])
 
-  const running = endsAt !== null
+  return {
+    remaining,
+    running: endsAt !== null,
+    done: endsAt !== null && remaining === 0,
+    lastPreset,
+    start,
+    stop,
+    extend,
+  }
+}
+
+/** Inline rest control — sits in the workout action bar, not floating over content. */
+export function RestTimerControl({ timer }: { timer: RestTimerState }) {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const { running, done, remaining, start, stop, extend } = timer
+
+  useEffect(() => {
+    if (running) setPickerOpen(false)
+  }, [running])
+
+  if (running) {
+    return (
+      <div
+        className={`flex items-center gap-1 h-11 pl-3 pr-1.5 rounded-lg border ${
+          done ? 'border-success bg-success-soft' : 'border-line bg-surface'
+        }`}
+      >
+        <Timer size={15} className={done ? 'text-success' : 'text-muted'} />
+        <span
+          className={`num font-bold text-[0.9375rem] min-w-[2.75rem] text-center ${
+            done ? 'text-success' : ''
+          }`}
+        >
+          {done ? 'Go' : fmt(remaining)}
+        </span>
+        {!done && (
+          <>
+            <button
+              onClick={() => extend(15)}
+              className="h-8 px-1.5 rounded text-xs font-bold text-muted hover:text-ink hover:bg-raised transition-colors"
+            >
+              +15
+            </button>
+            <button onClick={stop} className="icon-btn w-8 h-8" aria-label="Stop rest timer">
+              <X size={15} />
+            </button>
+          </>
+        )}
+      </div>
+    )
+  }
 
   return (
-    <div className="fixed bottom-20 sm:bottom-6 right-4 z-30 flex flex-col items-end gap-2">
-      {pickerOpen && !running && (
-        <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-2 flex gap-1.5">
+    <div className="relative">
+      {pickerOpen && (
+        <div className="absolute bottom-full mb-2 left-0 flex gap-1 p-1 rounded-lg bg-surface border border-line shadow-[var(--shadow-pop)]">
           {PRESETS.map(s => (
             <button
               key={s}
               onClick={() => start(s)}
-              className="px-3 py-2 rounded-xl bg-gray-800 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors"
+              className="h-9 px-2.5 rounded num text-sm font-semibold text-ink hover:bg-accent hover:text-[var(--accent-ink)] transition-colors"
             >
               {fmt(s)}
             </button>
           ))}
         </div>
       )}
-
-      {running ? (
-        <div
-          className={`flex items-center gap-2 rounded-2xl shadow-2xl px-4 py-3 border transition-colors ${
-            remaining === 0
-              ? 'bg-emerald-600 border-emerald-500'
-              : 'bg-gray-900 border-gray-700'
-          }`}
-        >
-          <Timer size={18} className={remaining === 0 ? 'text-white' : 'text-emerald-400'} />
-          <span className="font-bold text-white tabular-nums text-lg min-w-[3.5rem] text-center">
-            {remaining === 0 ? 'Go!' : fmt(remaining)}
-          </span>
-          {remaining > 0 && (
-            <>
-              <button
-                onClick={() => setEndsAt(e => (e === null ? null : e + 15000))}
-                className="text-gray-400 hover:text-white transition-colors flex items-center text-xs font-semibold"
-                aria-label="Add 15 seconds"
-              >
-                <Plus size={14} />15s
-              </button>
-              <button
-                onClick={stop}
-                className="text-gray-500 hover:text-red-400 transition-colors"
-                aria-label="Stop timer"
-              >
-                <X size={16} />
-              </button>
-            </>
-          )}
-        </div>
-      ) : (
-        <button
-          onClick={() => setPickerOpen(o => !o)}
-          className="flex items-center gap-2 bg-gray-900 border border-gray-700 hover:border-emerald-600 text-gray-300 hover:text-emerald-400 rounded-2xl shadow-2xl px-4 py-3 font-semibold text-sm transition-colors"
-        >
-          <Timer size={18} />
-          Rest
-        </button>
-      )}
+      <button
+        onClick={() => setPickerOpen(o => !o)}
+        className="flex items-center gap-1.5 h-11 px-3 rounded-lg border border-line bg-surface
+                   text-sm font-semibold text-muted hover:text-ink transition-colors"
+      >
+        <Timer size={15} />
+        Rest
+      </button>
     </div>
   )
 }

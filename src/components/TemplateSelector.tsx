@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Dumbbell } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import Modal from './Modal'
-import Spinner from './Spinner'
+import Skeleton from './Skeleton'
 import { WorkoutTemplate } from '../types/database'
 import { fetchTemplates } from '../services/templateService'
 import { useAuth } from '../contexts/AuthContext'
@@ -29,55 +29,53 @@ export default function TemplateSelector({ isOpen, onClose, onSelect }: Template
   }, [isOpen, user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Start Workout">
-      <div className="space-y-3">
+    <Modal isOpen={isOpen} onClose={onClose} title="Start workout">
+      <div>
         {loading ? (
-          <div className="flex justify-center py-8"><Spinner size="lg" /></div>
+          <div className="space-y-2">
+            {[0, 1, 2].map(i => <Skeleton key={i} className="h-14" />)}
+          </div>
         ) : (
           <>
-            {/* Empty workout option */}
-            <button
-              onClick={() => { onSelect(null); onClose() }}
-              className="w-full text-left p-4 rounded-xl border border-dashed border-gray-600 hover:border-emerald-500 hover:bg-emerald-900/10 transition-colors group"
-            >
-              <div className="font-semibold text-white group-hover:text-emerald-400 flex items-center gap-2">
-                <Dumbbell size={18} />
-                Empty Workout
-              </div>
-              <div className="text-sm text-gray-400 mt-0.5">Start from scratch</div>
-            </button>
-
             {templates.length > 0 && (
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-2 font-medium">
-                  Your Templates
-                </p>
-                <div className="space-y-2">
-                  {templates.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => { onSelect(t); onClose() }}
-                      className="w-full text-left p-4 rounded-xl border border-gray-700 hover:border-emerald-500 hover:bg-emerald-900/10 transition-colors group"
-                    >
-                      <div className="font-semibold text-white group-hover:text-emerald-400">
-                        {t.name}
-                      </div>
-                      <div className="text-sm text-gray-400 mt-1">
-                        {t.template_exercises
-                          ?.sort((a, b) => a.sort_order - b.sort_order)
-                          .map(te => te.exercise?.name)
-                          .filter(Boolean)
-                          .join(' · ') || 'No exercises'}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <>
+                <div className="section-label">From a template</div>
+                <ul className="mt-1.5 border-t border-line">
+                  {templates.map(t => {
+                    const names = t.template_exercises
+                      ?.slice()
+                      .sort((a, b) => a.sort_order - b.sort_order)
+                      .map(te => te.exercise?.name)
+                      .filter(Boolean)
+                    return (
+                      <li key={t.id} className="border-b border-line">
+                        <button
+                          onClick={() => { onSelect(t); onClose() }}
+                          className="w-full flex items-center gap-3 py-3 px-1 -mx-1 text-left hover:bg-raised transition-colors"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-sm">{t.name}</div>
+                            <div className="mt-0.5 text-[0.8125rem] text-muted truncate">
+                              {names?.join(' · ') || 'No exercises'}
+                            </div>
+                          </div>
+                          <ChevronRight size={16} className="text-faint shrink-0" />
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </>
             )}
 
+            <button onClick={() => { onSelect(null); onClose() }} className="btn-secondary w-full mt-4">
+              Empty workout
+            </button>
+
             {templates.length === 0 && (
-              <p className="text-sm text-gray-500 text-center py-2">
-                No templates yet. Create one in "My Templates".
+              <p className="mt-3 text-sm text-muted leading-relaxed">
+                You have no templates yet. Start empty and add exercises as you go — or build a
+                template on the Templates tab so your usual lifts load in one tap.
               </p>
             )}
           </>
