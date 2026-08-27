@@ -31,7 +31,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen lg:flex">
       {/* ── Desktop sidebar ─────────────────────────────────── */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-[15rem] lg:shrink-0 border-r border-line bg-surface">
+      <aside className="hidden lg:flex lg:flex-col lg:w-[15rem] lg:shrink-0 lg:sticky lg:top-0 lg:h-screen border-r border-line bg-surface">
         <div className="h-14 flex items-center gap-2.5 px-5 border-b border-line">
           <span className="w-6 h-6 rounded bg-accent text-[var(--accent-ink)] grid place-items-center">
             <Dumbbell size={14} strokeWidth={2.5} />

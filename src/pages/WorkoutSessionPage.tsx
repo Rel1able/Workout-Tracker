@@ -12,9 +12,25 @@ import { RestTimerControl, useRestTimer } from '../components/RestTimer'
 import { Exercise, SessionExercise, SessionSet, WorkoutTemplate } from '../types/database'
 import { saveWorkout, finishWorkout, upsertWorkoutDraft } from '../services/workoutService'
 import { fetchExercises } from '../services/exerciseService'
-import { fetchWorkoutHistory, buildLastPerformanceMap, LastPerformance } from '../services/statsService'
+import {
+  fetchWorkoutHistory,
+  buildLastPerformanceMap,
+  best1RM,
+  weightForReps,
+  E1RM_REP_LIMIT,
+  Estimated1RM,
+  LastPerformance,
+} from '../services/statsService'
 
 const WEIGHT_STEP = 2.5
+
+/** Rep targets shown in the 1RM breakdown. */
+const RM_TARGETS = [1, 3, 5, 8, 10, 12]
+
+/** Gym-friendly precision — nobody loads 63.28 kg. */
+function roundHalf(n: number) {
+  return Math.round(n * 2) / 2
+}
 
 function todayStr() {
   const d = new Date()
@@ -91,6 +107,8 @@ export default function WorkoutSessionPage() {
   const [lastPerf, setLastPerf] = useState<Map<number, LastPerformance>>(new Map())
   const [editingExercise, setEditingExercise] = useState<string | null>(null)
   const [activeSet, setActiveSet] = useState<string | null>(null)
+  /** localId of the exercise whose 1RM breakdown is expanded. */
+  const [openRm, setOpenRm] = useState<string | null>(null)
   /** Sets ticked off during this session — UI state only, not stored. */
   const [doneSets, setDoneSets] = useState<Set<string>>(new Set())
 
@@ -295,6 +313,12 @@ export default function WorkoutSessionPage() {
 
           {exercises.map((ex, exIdx) => {
             const last = ex.exercise_id ? lastPerf.get(ex.exercise_id) : undefined
+            const oneRm = best1RM(ex.sets)
+            const lastRm = last ? best1RM(last.sets) : null
+            const rmChangePct =
+              oneRm && lastRm && lastRm.value > 0
+                ? ((oneRm.value - lastRm.value) / lastRm.value) * 100
+                : null
             return (
               <section key={ex.localId} className="panel">
                 {/* Exercise header */}
@@ -469,6 +493,42 @@ export default function WorkoutSessionPage() {
                   </div>
                 )}
 
+                {/* Estimated 1RM from the best set logged so far */}
+                {oneRm && (
+                  <div className="border-t border-line">
+                    <button
+                      onClick={() => setOpenRm(openRm === ex.localId ? null : ex.localId)}
+                      className="w-full flex items-center gap-2 px-3 sm:px-4 py-2 text-left hover:bg-raised transition-colors"
+                      aria-expanded={openRm === ex.localId}
+                    >
+                      <span className="section-label shrink-0">Est. 1RM</span>
+                      <span className="num text-sm font-bold">{roundHalf(oneRm.value)} kg</span>
+                      <span className="num text-2xs text-faint truncate">
+                        from {oneRm.weight}×{oneRm.reps}
+                      </span>
+                      {rmChangePct !== null && Math.round(rmChangePct) !== 0 && (
+                        <span
+                          className={`num text-2xs font-semibold ${
+                            rmChangePct > 0 ? 'text-success' : 'text-muted'
+                          }`}
+                          title={`Last time: ${roundHalf(lastRm!.value)} kg`}
+                        >
+                          {rmChangePct > 0 ? '+' : ''}
+                          {Math.round(rmChangePct)}%
+                        </span>
+                      )}
+                      <ChevronDown
+                        size={14}
+                        className={`ml-auto shrink-0 text-faint transition-transform ${
+                          openRm === ex.localId ? 'rotate-180' : ''
+                        }`}
+                      />
+                    </button>
+
+                    {openRm === ex.localId && <RmBreakdown oneRm={oneRm} />}
+                  </div>
+                )}
+
                 <button
                   onClick={() => addSet(ex.localId)}
                   className="w-full h-11 flex items-center justify-center gap-1.5 text-sm font-semibold
@@ -620,6 +680,35 @@ function Stepper({
       >
         <Plus size={15} strokeWidth={2.5} />
       </button>
+    </div>
+  )
+}
+
+/** Epley predictions for common rep targets, derived from the session's best set. */
+function RmBreakdown({ oneRm }: { oneRm: Estimated1RM }) {
+  return (
+    <div className="border-t border-line bg-raised px-3 sm:px-4 py-2.5">
+      <p className="text-2xs text-muted leading-relaxed">
+        Epley estimate from your best set today. Roughly the weight (kg) you should manage for:
+      </p>
+      <div className="mt-2 grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+        {RM_TARGETS.map(r => (
+          <div key={r} className="rounded-lg border border-line bg-surface px-2 py-1.5 text-center">
+            <div className="num text-2xs text-faint">
+              {r} rep{r === 1 ? '' : 's'}
+            </div>
+            <div className="num text-sm font-bold leading-tight">
+              {roundHalf(weightForReps(oneRm.value, r))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {!oneRm.reliable && (
+        <p className="mt-2 text-2xs text-warn leading-relaxed">
+          Your best set was {oneRm.reps} reps. Past {E1RM_REP_LIMIT} the formula runs high — treat
+          this as a ceiling, not a number to load up.
+        </p>
+      )}
     </div>
   )
 }

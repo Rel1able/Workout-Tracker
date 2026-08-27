@@ -51,7 +51,7 @@ Key invariants to preserve when touching this area:
 
 ### Stats and charts
 
-[src/services/statsService.ts](src/services/statsService.ts) fetches finished workouts once and derives everything client-side — `computeOverviewStats` (weekly streak by Monday-start weeks), `buildExerciseSeries`, `buildLastPerformanceMap` (feeds the "last time you did this" hints in the session editor). Charts in `ProgressPage` are hand-rolled inline SVG; there is no charting library.
+[src/services/statsService.ts](src/services/statsService.ts) fetches finished workouts once and derives everything client-side — `computeOverviewStats` (weekly streak by Monday-start weeks), `buildExerciseSeries`, `buildLastPerformanceMap` (feeds the "last time you did this" hints in the session editor), `buildExerciseTrends` + `topMovers` (last `TREND_WINDOW_DAYS` vs the window before, powering the "What changed" list), and `best1RM` / `weightForReps` (Epley one-rep-max estimate, used by both the session editor and the `est1RM` chart metric). `buildExerciseTrends` is a single pass over the history — call it once per page and derive from the result. Charts in `ProgressPage` are hand-rolled inline SVG; there is no charting library.
 
 ## Styling
 

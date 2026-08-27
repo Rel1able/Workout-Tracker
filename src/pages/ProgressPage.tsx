@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { ArrowRight, TrendingDown, TrendingUp } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import Skeleton from '../components/Skeleton'
@@ -6,24 +7,43 @@ import {
   fetchWorkoutHistory,
   computeOverviewStats,
   buildExerciseSeries,
+  buildExerciseTrends,
+  topMovers,
   workoutVolume,
   DetailedWorkout,
   ExercisePoint,
+  ExerciseTrend,
+  TREND_WINDOW_DAYS,
 } from '../services/statsService'
 
-type Metric = 'maxWeight' | 'volume' | 'maxReps'
+type Metric = 'maxWeight' | 'est1RM' | 'volume' | 'maxReps'
 
 const METRIC_LABELS: Record<Metric, string> = {
   maxWeight: 'Top weight',
+  est1RM: 'Estimated 1RM',
   volume: 'Session volume',
   maxReps: 'Best reps',
 }
+const METRIC_SHORT: Record<Metric, string> = {
+  maxWeight: 'Weight',
+  est1RM: '1RM',
+  volume: 'Volume',
+  maxReps: 'Reps',
+}
 const METRIC_UNITS: Record<Metric, string> = {
   maxWeight: 'kg',
+  est1RM: 'kg',
   volume: 'kg',
   maxReps: 'reps',
 }
 const WEEKS_SHOWN = 12
+
+/** "up 18%" / "down 7%" / "level" — the wording used in the highlight lines. */
+function pctWording(pct: number) {
+  const rounded = Math.round(Math.abs(pct))
+  if (rounded === 0) return 'held level'
+  return `${pct > 0 ? 'up' : 'down'} ${rounded}%`
+}
 
 function pad(n: number) {
   return String(n).padStart(2, '0')
@@ -86,6 +106,13 @@ export default function ProgressPage() {
     [history, selectedExercise]
   )
 
+  const trends = useMemo(() => buildExerciseTrends(history), [history])
+  const highlights = useMemo(() => topMovers(trends), [trends])
+  const selectedTrend = useMemo(
+    () => trends.find(t => t.exerciseId === selectedExercise) ?? null,
+    [trends, selectedExercise]
+  )
+
   // Volume per calendar week, oldest first, including weeks without a session
   const weeklyVolume = useMemo(() => {
     const byWeek = new Map<string, number>()
@@ -137,6 +164,46 @@ export default function ProgressPage() {
         <Stat label="Month volume" value={stats.monthVolume.toLocaleString()} unit="kg" />
       </section>
 
+      {/* ── What changed ─────────────────────────────────────────────────── */}
+      {highlights.length > 0 && (
+        <section>
+          <h2 className="font-semibold">What changed</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Last {TREND_WINDOW_DAYS} days vs the {TREND_WINDOW_DAYS} before
+          </p>
+          <ul className="mt-2 border-t border-line">
+            {highlights.map(t => (
+              <li key={t.exerciseId} className="border-b border-line">
+                <button
+                  onClick={() => setSelectedExercise(t.exerciseId)}
+                  className="w-full flex items-center gap-3 py-3 px-1 -mx-1 text-left hover:bg-raised transition-colors"
+                >
+                  <TrendIcon pct={t.volumeChangePct as number} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm">
+                      <span className="font-semibold">{t.name}</span> volume{' '}
+                      <span className={changeClass(t.volumeChangePct as number)}>
+                        {pctWording(t.volumeChangePct as number)}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-2xs text-faint num">
+                      {t.previousVolume.toLocaleString()} → {t.volume.toLocaleString()} kg ·{' '}
+                      {t.sessions} session{t.sessions === 1 ? '' : 's'}
+                      {t.oneRmChangePct !== null &&
+                        t.best1RM > 0 &&
+                        Math.round(t.oneRmChangePct) !== 0 && (
+                          <> · est. 1RM {pctWording(t.oneRmChangePct)} to {t.best1RM} kg</>
+                        )}
+                    </p>
+                  </div>
+                  <ArrowRight size={15} className="text-faint shrink-0" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-8 lg:items-start space-y-8 lg:space-y-0">
         {/* ── Exercise progression ───────────────────────────────────────── */}
         <section>
@@ -144,8 +211,13 @@ export default function ProgressPage() {
             <h2 className="font-semibold">Exercise progression</h2>
             <div className="seg" role="group" aria-label="Metric">
               {(Object.keys(METRIC_LABELS) as Metric[]).map(m => (
-                <button key={m} onClick={() => setMetric(m)} aria-pressed={metric === m}>
-                  {m === 'maxWeight' ? 'Weight' : m === 'volume' ? 'Volume' : 'Reps'}
+                <button
+                  key={m}
+                  onClick={() => setMetric(m)}
+                  aria-pressed={metric === m}
+                  title={METRIC_LABELS[m]}
+                >
+                  {METRIC_SHORT[m]}
                 </button>
               ))}
             </div>
@@ -165,6 +237,8 @@ export default function ProgressPage() {
           </select>
 
           <LineChart points={series} metric={metric} />
+
+          {selectedTrend && <TrendPanel trend={selectedTrend} />}
         </section>
 
         {/* ── Weekly volume ──────────────────────────────────────────────── */}
@@ -186,6 +260,100 @@ function Stat({ label, value, unit }: { label: string; value: string; unit: stri
         <span className="num text-2xl font-bold leading-none">{value}</span>
         <span className="text-xs text-muted">{unit}</span>
       </div>
+    </div>
+  )
+}
+
+// ─── Trend readouts ──────────────────────────────────────────────────────────
+
+/** Gains read as positive; anything else stays neutral — a deload is not a failure. */
+function changeClass(pct: number) {
+  return pct > 0 ? 'text-success font-semibold' : 'text-muted font-semibold'
+}
+
+function TrendIcon({ pct }: { pct: number }) {
+  const Icon = pct >= 0 ? TrendingUp : TrendingDown
+  return (
+    <span
+      className={`shrink-0 w-8 h-8 grid place-items-center rounded-lg ${
+        pct > 0 ? 'bg-success-soft text-success' : 'bg-raised text-muted'
+      }`}
+    >
+      <Icon size={16} />
+    </span>
+  )
+}
+
+function trendSentence(t: ExerciseTrend): string {
+  if (t.sessions === 0) {
+    return `No ${t.name} logged in the last ${t.windowDays} days.`
+  }
+  const load = `${t.volume.toLocaleString()} kg across ${t.sessions} session${t.sessions === 1 ? '' : 's'}`
+  if (t.volumeChangePct === null) {
+    return `First ${t.windowDays}-day block with ${t.name} logged — ${load}.`
+  }
+  return `${t.name} volume ${pctWording(t.volumeChangePct)} over the last ${t.windowDays} days — ${load}, against ${t.previousVolume.toLocaleString()} kg before.`
+}
+
+function TrendPanel({ trend }: { trend: ExerciseTrend }) {
+  return (
+    <div className="mt-4 panel p-4">
+      <div className="section-label">
+        Last {trend.windowDays} days vs the {trend.windowDays} before
+      </div>
+      <dl className="mt-3 grid grid-cols-3 gap-3">
+        <TrendCell
+          label="Volume"
+          value={trend.volume > 0 ? `${trend.volume.toLocaleString()} kg` : '—'}
+          was={trend.previousVolume > 0 ? `${trend.previousVolume.toLocaleString()} kg` : '—'}
+          pct={trend.volumeChangePct}
+        />
+        <TrendCell
+          label="Est. 1RM"
+          value={trend.best1RM > 0 ? `${trend.best1RM} kg` : '—'}
+          was={trend.previousBest1RM > 0 ? `${trend.previousBest1RM} kg` : '—'}
+          pct={trend.oneRmChangePct}
+        />
+        <TrendCell
+          label="Sessions"
+          value={String(trend.sessions)}
+          was={String(trend.previousSessions)}
+          pct={null}
+        />
+      </dl>
+      <p className="mt-3 text-xs text-muted leading-relaxed">{trendSentence(trend)}</p>
+    </div>
+  )
+}
+
+function TrendCell({
+  label,
+  value,
+  was,
+  pct,
+}: {
+  label: string
+  value: string
+  was: string
+  pct: number | null
+}) {
+  return (
+    <div>
+      <dt className="section-label">{label}</dt>
+      <dd className="mt-0.5">
+        <div className="num text-lg font-bold leading-tight">{value}</div>
+        <div className="mt-0.5 text-2xs num">
+          {pct !== null ? (
+            <span className={changeClass(pct)}>
+              {pct > 0 ? '+' : ''}
+              {Math.round(pct)}%
+            </span>
+          ) : (
+            <span className="text-faint">no baseline</span>
+          )}
+          <span className="text-faint"> · was {was}</span>
+        </div>
+      </dd>
     </div>
   )
 }
@@ -297,6 +465,13 @@ function LineChart({ points, metric }: { points: ExercisePoint[]; metric: Metric
           </text>
         )}
       </svg>
+
+      {metric === 'est1RM' && (
+        <p className="mt-2 text-2xs text-muted leading-relaxed">
+          Epley estimate (weight × (1 + reps/30)) from the best set of each session. Sessions with
+          no weight logged plot as zero.
+        </p>
+      )}
     </div>
   )
 }
