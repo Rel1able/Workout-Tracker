@@ -45,6 +45,25 @@ function pctWording(pct: number) {
   return `${pct > 0 ? 'up' : 'down'} ${rounded}%`
 }
 
+/**
+ * How a trend's volume moved. A percentage when there is a baseline to divide
+ * by, otherwise the direction on its own — bodyweight sets score 0 volume.
+ */
+function volumeWording(t: ExerciseTrend) {
+  if (t.volumeChangePct !== null) return pctWording(t.volumeChangePct)
+  return t.startedLoading ? 'up from bodyweight only' : 'logged'
+}
+
+/** Direction for icon/colour, without needing a percentage. */
+function volumeDirection(t: ExerciseTrend) {
+  if (t.volumeChangePct !== null) return t.volumeChangePct
+  return t.startedLoading ? 1 : 0
+}
+
+function fmtVolume(kg: number) {
+  return kg > 0 ? `${kg.toLocaleString()} kg` : 'bodyweight'
+}
+
 function pad(n: number) {
   return String(n).padStart(2, '0')
 }
@@ -172,34 +191,35 @@ export default function ProgressPage() {
             Last {TREND_WINDOW_DAYS} days vs the {TREND_WINDOW_DAYS} before
           </p>
           <ul className="mt-2 border-t border-line">
-            {highlights.map(t => (
-              <li key={t.exerciseId} className="border-b border-line">
-                <button
-                  onClick={() => setSelectedExercise(t.exerciseId)}
-                  className="w-full flex items-center gap-3 py-3 px-1 -mx-1 text-left hover:bg-raised transition-colors"
-                >
-                  <TrendIcon pct={t.volumeChangePct as number} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm">
-                      <span className="font-semibold">{t.name}</span> volume{' '}
-                      <span className={changeClass(t.volumeChangePct as number)}>
-                        {pctWording(t.volumeChangePct as number)}
-                      </span>
-                    </p>
-                    <p className="mt-0.5 text-2xs text-faint num">
-                      {t.previousVolume.toLocaleString()} → {t.volume.toLocaleString()} kg ·{' '}
-                      {t.sessions} session{t.sessions === 1 ? '' : 's'}
-                      {t.oneRmChangePct !== null &&
-                        t.best1RM > 0 &&
-                        Math.round(t.oneRmChangePct) !== 0 && (
-                          <> · est. 1RM {pctWording(t.oneRmChangePct)} to {t.best1RM} kg</>
-                        )}
-                    </p>
-                  </div>
-                  <ArrowRight size={15} className="text-faint shrink-0" />
-                </button>
-              </li>
-            ))}
+            {highlights.map(t => {
+              const dir = volumeDirection(t)
+              return (
+                <li key={t.exerciseId} className="border-b border-line">
+                  <button
+                    onClick={() => setSelectedExercise(t.exerciseId)}
+                    className="w-full flex items-center gap-3 py-3 px-1 -mx-1 text-left hover:bg-raised transition-colors"
+                  >
+                    <TrendIcon pct={dir} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">
+                        <span className="font-semibold">{t.name}</span> volume{' '}
+                        <span className={changeClass(dir)}>{volumeWording(t)}</span>
+                      </p>
+                      <p className="mt-0.5 text-2xs text-faint num">
+                        {fmtVolume(t.previousVolume)} → {fmtVolume(t.volume)} · {t.sessions} session
+                        {t.sessions === 1 ? '' : 's'}
+                        {t.oneRmChangePct !== null &&
+                          t.best1RM > 0 &&
+                          Math.round(t.oneRmChangePct) !== 0 && (
+                            <> · est. 1RM {pctWording(t.oneRmChangePct)} to {t.best1RM} kg</>
+                          )}
+                      </p>
+                    </div>
+                    <ArrowRight size={15} className="text-faint shrink-0" />
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         </section>
       )}
@@ -288,11 +308,18 @@ function trendSentence(t: ExerciseTrend): string {
   if (t.sessions === 0) {
     return `No ${t.name} logged in the last ${t.windowDays} days.`
   }
-  const load = `${t.volume.toLocaleString()} kg across ${t.sessions} session${t.sessions === 1 ? '' : 's'}`
-  if (t.volumeChangePct === null) {
-    return `First ${t.windowDays}-day block with ${t.name} logged — ${load}.`
+  const sessions = `${t.sessions} session${t.sessions === 1 ? '' : 's'}`
+
+  if (t.startedLoading) {
+    return `${t.name} volume is up from nothing — ${t.volume.toLocaleString()} kg across ${sessions}, where the previous ${t.windowDays} days were bodyweight only. No percentage: there is no baseline to divide by.`
   }
-  return `${t.name} volume ${pctWording(t.volumeChangePct)} over the last ${t.windowDays} days — ${load}, against ${t.previousVolume.toLocaleString()} kg before.`
+  if (t.volumeChangePct === null) {
+    if (t.volume === 0) {
+      return `${t.name} is bodyweight only — ${sessions} logged, but no weight to build a volume trend from. Add the weight you hang or wear to track it.`
+    }
+    return `First ${t.windowDays}-day block with ${t.name} logged — ${t.volume.toLocaleString()} kg across ${sessions}.`
+  }
+  return `${t.name} volume ${pctWording(t.volumeChangePct)} over the last ${t.windowDays} days — ${t.volume.toLocaleString()} kg across ${sessions}, against ${t.previousVolume.toLocaleString()} kg before.`
 }
 
 function TrendPanel({ trend }: { trend: ExerciseTrend }) {
@@ -304,8 +331,8 @@ function TrendPanel({ trend }: { trend: ExerciseTrend }) {
       <dl className="mt-3 grid grid-cols-3 gap-3">
         <TrendCell
           label="Volume"
-          value={trend.volume > 0 ? `${trend.volume.toLocaleString()} kg` : '—'}
-          was={trend.previousVolume > 0 ? `${trend.previousVolume.toLocaleString()} kg` : '—'}
+          value={fmtVolume(trend.volume)}
+          was={fmtVolume(trend.previousVolume)}
           pct={trend.volumeChangePct}
         />
         <TrendCell
@@ -343,15 +370,13 @@ function TrendCell({
       <dd className="mt-0.5">
         <div className="num text-lg font-bold leading-tight">{value}</div>
         <div className="mt-0.5 text-2xs num">
-          {pct !== null ? (
+          {pct !== null && (
             <span className={changeClass(pct)}>
               {pct > 0 ? '+' : ''}
-              {Math.round(pct)}%
+              {Math.round(pct)}%{' '}
             </span>
-          ) : (
-            <span className="text-faint">no baseline</span>
           )}
-          <span className="text-faint"> · was {was}</span>
+          <span className="text-faint">was {was}</span>
         </div>
       </dd>
     </div>

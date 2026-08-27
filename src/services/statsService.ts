@@ -217,13 +217,19 @@ export interface ExerciseTrend {
   previousSessions: number
   volume: number
   previousVolume: number
-  /** Percent change vs the preceding window; null when there is no baseline. */
+  /**
+   * Percent change vs the preceding window. Null when that window had no
+   * volume at all — bodyweight work scores 0, and there is no percentage
+   * change from zero. `startedLoading` covers that case instead.
+   */
   volumeChangePct: number | null
   best1RM: number
   previousBest1RM: number
   oneRmChangePct: number | null
   topWeight: number
   previousTopWeight: number
+  /** Trained before but unloaded; now carrying weight. Growth, no percentage. */
+  startedLoading: boolean
 }
 
 interface TrendBucket {
@@ -297,16 +303,26 @@ export function buildExerciseTrends(
     oneRmChangePct: pctChange(e.cur.best1RM, e.prev.best1RM),
     topWeight: e.cur.topWeight,
     previousTopWeight: e.prev.topWeight,
+    startedLoading: e.prev.volume === 0 && e.cur.volume > 0 && e.prev.sessions > 0,
   }))
 }
 
 /**
- * Trends worth calling out: trained in both windows, biggest volume swing first.
- * A 0% change is still a valid comparison, just a boring one, so it sorts last.
+ * Trends worth calling out: trained in both windows and carrying volume in at
+ * least one of them. Newly loaded exercises lead (growth from zero has no
+ * percentage), then the biggest swings. A 0% change sorts last.
  */
 export function topMovers(trends: ExerciseTrend[], limit = 3): ExerciseTrend[] {
   return trends
-    .filter(t => t.sessions > 0 && t.previousSessions > 0 && t.volumeChangePct !== null)
-    .sort((a, b) => Math.abs(b.volumeChangePct as number) - Math.abs(a.volumeChangePct as number))
+    .filter(
+      t =>
+        t.sessions > 0 &&
+        t.previousSessions > 0 &&
+        (t.volumeChangePct !== null || t.startedLoading)
+    )
+    .sort((a, b) => {
+      if (a.startedLoading !== b.startedLoading) return a.startedLoading ? -1 : 1
+      return Math.abs(b.volumeChangePct ?? 0) - Math.abs(a.volumeChangePct ?? 0)
+    })
     .slice(0, limit)
 }
