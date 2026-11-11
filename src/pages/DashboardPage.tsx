@@ -12,23 +12,7 @@ import { fetchWorkoutByDate, fetchDraftWorkout } from '../services/workoutServic
 import { fetchPersonalRecords } from '../services/prService'
 import { fetchWorkoutHistory, workoutVolume, DetailedWorkout } from '../services/statsService'
 import { WorkoutTemplate, Workout, WorkoutExercise, PersonalRecord } from '../types/database'
-
-function pad(n: number) {
-  return String(n).padStart(2, '0')
-}
-function isoDate(d: Date) {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-function todayStr() {
-  return isoDate(new Date())
-}
-/** Monday of the current week. */
-function weekStart(d = new Date()) {
-  const copy = new Date(d)
-  copy.setDate(copy.getDate() - ((copy.getDay() + 6) % 7))
-  copy.setHours(0, 0, 0, 0)
-  return copy
-}
+import { formatDate, toIsoDate, todayIso, weekStart } from '../lib/dates'
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
@@ -41,7 +25,7 @@ export default function DashboardPage() {
 
   const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
-  const [summaryDate, setSummaryDate] = useState<string>(todayStr())
+  const [summaryDate, setSummaryDate] = useState<string>(todayIso())
   const [summaryWorkout, setSummaryWorkout] = useState<(Workout & { workout_exercises: WorkoutExercise[] }) | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
 
@@ -55,7 +39,7 @@ export default function DashboardPage() {
     setLoading(true)
     const from = new Date()
     from.setDate(from.getDate() - 120)
-    Promise.all([fetchPersonalRecords(user.id), fetchWorkoutHistory(user.id, isoDate(from))])
+    Promise.all([fetchPersonalRecords(user.id), fetchWorkoutHistory(user.id, toIsoDate(from))])
       .then(([prData, hist]) => {
         setPrs(prData.slice(0, 6))
         setHistory(hist)
@@ -67,7 +51,7 @@ export default function DashboardPage() {
   // If no active local session, check the DB for an unfinished draft for today
   useEffect(() => {
     if (!user || hasActiveSession) return
-    fetchDraftWorkout(user.id, todayStr())
+    fetchDraftWorkout(user.id, todayIso())
       .then(draft => { if (draft) resumeDraftSession(draft) })
       .catch(() => { /* ignore */ })
   }, [user, hasActiveSession, resumeDraftSession])
@@ -97,7 +81,7 @@ export default function DashboardPage() {
       ?.slice()
       .sort((a, b) => a.sort_order - b.sort_order)
       .map(te => ({ exercise_id: te.exercise_id, exercise_name: te.exercise?.name ?? 'Unknown' }))
-    initSession(todayStr(), picked)
+    initSession(todayIso(), picked)
     navigate('/workout')
   }
 
@@ -108,14 +92,14 @@ export default function DashboardPage() {
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(start)
       d.setDate(d.getDate() + i)
-      const date = isoDate(d)
+      const date = toIsoDate(d)
       return {
         date,
         letter: DAY_LETTERS[i],
         dayNum: d.getDate(),
         done: doneDates.has(date),
-        isToday: date === todayStr(),
-        isFuture: date > todayStr(),
+        isToday: date === todayIso(),
+        isFuture: date > todayIso(),
       }
     })
   }, [doneDates])
@@ -243,7 +227,7 @@ export default function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold num">
-                            {new Date(w.workout_date + 'T12:00:00').toLocaleDateString('en-US', {
+                            {formatDate(w.workout_date, {
                               weekday: 'short', month: 'short', day: 'numeric',
                             })}
                           </span>
@@ -317,7 +301,7 @@ export default function DashboardPage() {
         loading={summaryLoading}
         date={summaryDate}
         onStartWorkout={
-          summaryDate === todayStr() && !hasActiveSession
+          summaryDate === todayIso() && !hasActiveSession
             ? () => setTemplateSelectorOpen(true)
             : undefined
         }

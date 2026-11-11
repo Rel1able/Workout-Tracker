@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { Workout, WorkoutExercise, WorkoutSet } from '../types/database'
+import { parseIsoDate, toIsoDate, weekStart } from '../lib/dates'
 
 export type DetailedWorkout = Workout & { workout_exercises: WorkoutExercise[] }
 
@@ -128,22 +129,9 @@ export interface OverviewStats {
   streakWeeks: number
 }
 
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-/** Monday of the week containing `d`. */
-function weekStart(d: Date): Date {
-  const copy = new Date(d)
-  const day = (copy.getDay() + 6) % 7 // Mon=0 … Sun=6
-  copy.setDate(copy.getDate() - day)
-  copy.setHours(0, 0, 0, 0)
-  return copy
-}
-
 export function computeOverviewStats(history: DetailedWorkout[]): OverviewStats {
   const now = new Date()
-  const wkStart = isoDate(weekStart(now))
+  const wkStart = toIsoDate(weekStart(now))
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
   const thisWeek = history.filter(w => w.workout_date >= wkStart).length
@@ -151,13 +139,13 @@ export function computeOverviewStats(history: DetailedWorkout[]): OverviewStats 
 
   // Streak: consecutive calendar weeks (incl. current) with >= 1 workout
   const weekSet = new Set(
-    history.map(w => isoDate(weekStart(new Date(w.workout_date + 'T12:00:00'))))
+    history.map(w => toIsoDate(weekStart(parseIsoDate(w.workout_date))))
   )
   let streakWeeks = 0
   const cursor = weekStart(now)
   // Current week counts if it has a workout; otherwise streak continues from last week
-  if (!weekSet.has(isoDate(cursor))) cursor.setDate(cursor.getDate() - 7)
-  while (weekSet.has(isoDate(cursor))) {
+  if (!weekSet.has(toIsoDate(cursor))) cursor.setDate(cursor.getDate() - 7)
+  while (weekSet.has(toIsoDate(cursor))) {
     streakWeeks++
     cursor.setDate(cursor.getDate() - 7)
   }
@@ -262,8 +250,8 @@ export function buildExerciseTrends(
   curFrom.setDate(curFrom.getDate() - (windowDays - 1))
   const prevFrom = new Date(today)
   prevFrom.setDate(prevFrom.getDate() - (windowDays * 2 - 1))
-  const curFromStr = isoDate(curFrom)
-  const prevFromStr = isoDate(prevFrom)
+  const curFromStr = toIsoDate(curFrom)
+  const prevFromStr = toIsoDate(prevFrom)
 
   const acc = new Map<number, { name: string; cur: TrendBucket; prev: TrendBucket }>()
 

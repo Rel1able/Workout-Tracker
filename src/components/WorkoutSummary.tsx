@@ -3,6 +3,7 @@ import Modal from './Modal'
 import Skeleton from './Skeleton'
 import { Workout, WorkoutExercise } from '../types/database'
 import { workoutVolume } from '../services/statsService'
+import { formatDate } from '../lib/dates'
 
 function formatDuration(start: string, end: string): string | null {
   const mins = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
@@ -30,7 +31,7 @@ export default function WorkoutSummary({
   onStartWorkout,
   onEditWorkout,
 }: WorkoutSummaryProps) {
-  const formatted = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
+  const formatted = formatDate(date, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',

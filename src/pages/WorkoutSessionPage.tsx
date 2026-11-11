@@ -10,6 +10,7 @@ import Modal from '../components/Modal'
 import Spinner from '../components/Spinner'
 import { RestTimerControl, useRestTimer } from '../components/RestTimer'
 import { Exercise, SessionExercise, SessionSet, WorkoutTemplate } from '../types/database'
+import { formatDate, toIsoDate, todayIso } from '../lib/dates'
 import { saveWorkout, finishWorkout, upsertWorkoutDraft } from '../services/workoutService'
 import { fetchExercises } from '../services/exerciseService'
 import {
@@ -30,11 +31,6 @@ const RM_TARGETS = [1, 3, 5, 8, 10, 12]
 /** Gym-friendly precision — nobody loads 63.28 kg. */
 function roundHalf(n: number) {
   return Math.round(n * 2) / 2
-}
-
-function todayStr() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 // Elapsed time since startedAt, updated every second
@@ -59,10 +55,6 @@ function fmtSet(s: { reps: number | null; weight_kg: number | null }) {
   const w = s.weight_kg != null ? `${s.weight_kg}` : '–'
   const r = s.reps ?? '–'
   return `${w}×${r}`
-}
-
-function shortDate(date: string) {
-  return new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 function sessionVolume(exercises: SessionExercise[]) {
@@ -125,14 +117,14 @@ export default function WorkoutSessionPage() {
     if (!user || !workoutDate) return
     const from = new Date()
     from.setDate(from.getDate() - 180)
-    const fromStr = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`
+    const fromStr = toIsoDate(from)
     fetchWorkoutHistory(user.id, fromStr)
       .then(history => setLastPerf(buildLastPerformanceMap(history, workoutDate)))
       .catch(() => {})
   }, [user, workoutDate])
 
   const formattedDate = workoutDate
-    ? new Date(workoutDate + 'T12:00:00').toLocaleDateString('en-US', {
+    ? formatDate(workoutDate, {
         weekday: 'short', month: 'short', day: 'numeric',
       })
     : ''
@@ -190,7 +182,7 @@ export default function WorkoutSessionPage() {
       ?.slice()
       .sort((a, b) => a.sort_order - b.sort_order)
       .map(te => ({ exercise_id: te.exercise_id, exercise_name: te.exercise?.name ?? 'Unknown' }))
-    initSession(todayStr(), picked)
+    initSession(todayIso(), picked)
   }
 
   const toggleDone = (setLocalId: string) => {
@@ -361,7 +353,7 @@ export default function WorkoutSessionPage() {
                   {last ? (
                     <>
                       <span className="text-2xs font-semibold uppercase tracking-wide text-faint shrink-0">
-                        Last {shortDate(last.date)}
+                        Last {formatDate(last.date)}
                       </span>
                       <span className="num text-[0.8125rem] text-muted truncate">
                         {last.sets.map(fmtSet).join('  ')}
